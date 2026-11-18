@@ -76,7 +76,9 @@ juce_add_binary_data(MutaformUI
 set_target_properties(MutaformUI PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 set(MUTAFORM_CORE_SOURCES
-    src/core/Params.cpp)
+    src/core/Params.cpp
+    src/core/SampleData.cpp
+    src/core/SamplerEngine.cpp)
 
 target_sources(Mutaform PRIVATE
     ${MUTAFORM_CORE_SOURCES}
@@ -123,6 +125,7 @@ if(MUTAFORM_BUILD_TESTS)
     add_executable(MutaformTests
         tests/TestMain.cpp
         tests/TestHelpers.h
+        tests/SamplerTests.cpp
         tests/StateTests.cpp)
     target_link_libraries(MutaformTests PRIVATE Mutaform Catch2::Catch2)
     # Reuse the plugin's compiled shared code; inherit its JUCE include paths/definitions.
