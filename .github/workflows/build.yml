@@ -18,7 +18,7 @@ jobs:
       BUILD_DIR: build
       CONFIG: Release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure
         shell: pwsh
@@ -46,7 +46,7 @@ jobs:
       - name: Unit tests
         shell: pwsh
         run: |
-          & "$env:BUILD_DIR/$env:CONFIG/MutaformTests.exe" --reporter console --success-is-quiet 2>$null
+          & "$env:BUILD_DIR/$env:CONFIG/MutaformTests.exe" --reporter console
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Download pluginval
@@ -73,7 +73,7 @@ jobs:
           if (Test-Path README.md) { Copy-Item README.md $out }
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Mutaform-win64
           path: dist/Mutaform-win64/
@@ -81,7 +81,7 @@ jobs:
 
       - name: Upload pluginval logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pluginval-logs
           path: pluginval-logs
