@@ -43,6 +43,9 @@ public:
     void setMultipoints (int layer, const std::vector<float>& normalisedPoints);
     void collectGarbage();
 
+    /** Message thread: queue a note from the UI (velocity 0 = note off). Lock-free. */
+    void queueNote (int note, float velocity);
+
     // ---- audio thread ----
     void render (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, const EngineSettings& settings);
     void allNotesOff (bool immediately);
@@ -99,6 +102,10 @@ private:
     void noteOff (int note);
     void renderVoices (juce::AudioBuffer<float>& out, int start, int num, const EngineSettings& s);
     double startPositionFor (int layer, int note, float velocity);
+
+    struct QueuedNote { int note; float velocity; };
+    juce::AbstractFifo noteFifo { 64 };
+    std::array<QueuedNote, 64> noteQueue {};
 
     std::array<SampleSlot, kNumLayers> slots;
     std::array<LayerRegion, kNumLayers> regions;

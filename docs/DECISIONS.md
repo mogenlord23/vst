@@ -51,3 +51,18 @@ Choices made autonomously during development. Newest at the bottom.
 17. **FX bypass/mix** are smoothed (30 ms) by blending a wet buffer, so toggling never clicks.
     The delay is a stereo line with mild cross-feed and damped feedback; tempo sync reads the
     host BPM from the play head (120 BPM fallback).
+18. **Relays are generated** from the APVTS parameter list (bool → toggle relay, choice →
+    combo relay, everything else → slider relay), named by parameter ID, so the UI and the
+    processor never drift apart.
+19. **UI scaling**: the page is laid out at 900×600 and scaled with a CSS transform; the
+    editor is resizable with a fixed 3:2 aspect (600×400 … 1800×1200).
+20. **On-screen + computer keyboard** (A…L row = C3…, Z/X octave, Space = EVOLVE) feed notes
+    through a lock-free FIFO into the engine, so the Standalone is playable without MIDI gear.
+21. **Factory presets** are generated at load time by code in `FactoryPresets.cpp` (FM bell,
+    filtered noise, pitch-enveloped kick, sub, formant vowel pads, Karplus-Strong pluck,
+    inharmonic plate) — not shipped as files. User presets are folders
+    `%APPDATA%\Mutaform\Presets\<name>\` with `preset.json` + `layerN.wav` (32-bit float).
+22. **Randomizer** touches layer level/pan/pitch/region/loop/reverse, ADSR, CHAOS and all FX,
+    but never the samples, mute/solo, master level or limiter.
+23. Stages were committed in pairs (2+3, 4+5, 6+7) where code was shared between them; each
+    pushed commit was verified green in CI before the next push.

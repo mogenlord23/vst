@@ -44,6 +44,13 @@ void SamplerEngine::setMultipoints (int layer, const std::vector<float>& pts)
     numMultipoints[(size_t) layer].store (n);
 }
 
+void SamplerEngine::queueNote (int note, float velocity)
+{
+    const auto scope = noteFifo.write (1);
+    if (scope.blockSize1 > 0)
+        noteQueue[(size_t) scope.startIndex1] = { juce::jlimit (0, 127, note), juce::jlimit (0.0f, 1.0f, velocity) };
+}
+
 void SamplerEngine::collectGarbage()
 {
     for (auto& s : slots)
@@ -278,6 +285,21 @@ void SamplerEngine::render (juce::AudioBuffer<float>& out, const juce::MidiBuffe
     for (auto& v : voices)
         if (v.active)
             v.adsr.setParameters (adsrParams);
+
+    {
+        const auto scope = noteFifo.read (noteFifo.getNumReady());
+        auto handleQueued = [this, &s] (int start, int size)
+        {
+            for (int i = 0; i < size; ++i)
+            {
+                const auto& q = noteQueue[(size_t) (start + i)];
+                if (q.velocity > 0.0f) noteOn (q.note, q.velocity, s);
+                else                   noteOff (q.note);
+            }
+        };
+        handleQueued (scope.startIndex1, scope.blockSize1);
+        handleQueued (scope.startIndex2, scope.blockSize2);
+    }
 
     const int numSamples = out.getNumSamples();
     int pos = 0;

@@ -80,7 +80,9 @@ set(MUTAFORM_CORE_SOURCES
     src/core/SampleData.cpp
     src/core/SamplerEngine.cpp
     src/core/Evolver.cpp
-    src/core/FxChain.cpp)
+    src/core/FxChain.cpp
+    src/core/Presets.cpp
+    src/core/FactoryPresets.cpp)
 
 target_sources(Mutaform PRIVATE
     ${MUTAFORM_CORE_SOURCES}
@@ -130,6 +132,7 @@ if(MUTAFORM_BUILD_TESTS)
         tests/SamplerTests.cpp
         tests/EvolverTests.cpp
         tests/FxTests.cpp
+        tests/PresetTests.cpp
         tests/StateTests.cpp)
     target_link_libraries(MutaformTests PRIVATE Mutaform Catch2::Catch2)
     # Reuse the plugin's compiled shared code; inherit its JUCE include paths/definitions.

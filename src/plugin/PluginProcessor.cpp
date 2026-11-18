@@ -172,6 +172,7 @@ bool MutaformProcessor::anyBusy() const
 void MutaformProcessor::publishLayer (int layer)
 {
     auto& L = layers[(size_t) layer];
+    ++L.revision;
     engine.setSample (layer, L.current());
     engine.setMultipoints (layer, L.multipoints);
     sendChangeMessage();
@@ -423,6 +424,157 @@ void MutaformProcessor::setMultipoints (int layer, std::vector<float> points)
 }
 
 //==============================================================================
+mf::PresetData MutaformProcessor::capturePreset (const juce::String& name) const
+{
+    mf::PresetData d;
+    d.name = name;
+    for (auto* p : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            d.params[rp->getParameterID()] = rp->convertFrom0to1 (rp->getValue());
+    for (int i = 0; i < mf::kNumLayers; ++i)
+    {
+        d.layers[(size_t) i].audio = layers[(size_t) i].current();
+        d.layers[(size_t) i].multipoints = layers[(size_t) i].multipoints;
+    }
+    return d;
+}
+
+void MutaformProcessor::applyPreset (const mf::PresetData& d)
+{
+    for (auto* p : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+        {
+            const auto it = d.params.find (rp->getParameterID());
+            const float norm = it != d.params.end() ? rp->convertTo0to1 (it->second) : rp->getDefaultValue();
+            rp->beginChangeGesture();
+            rp->setValueNotifyingHost (norm);
+            rp->endChangeGesture();
+        }
+    for (int i = 0; i < mf::kNumLayers; ++i)
+    {
+        const auto& L = d.layers[(size_t) i];
+        if (L.audio != nullptr)
+            setLayerSample (i, L.audio, "preset:" + d.name);
+        else
+            clearLayer (i);
+        setMultipoints (i, L.multipoints);
+    }
+    currentPreset = d.name;
+    sendChangeMessage();
+}
+
+bool MutaformProcessor::loadPresetById (const juce::String& id, juce::String& error)
+{
+    if (id.startsWith ("factory:"))
+    {
+        const int idx = id.fromFirstOccurrenceOf (":", false, false).getIntValue();
+        if (! juce::isPositiveAndBelow (idx, mf::factory::count()))
+        {
+            error = "Unknown factory preset";
+            return false;
+        }
+        applyPreset (mf::factory::create (idx, getSampleRate() > 0 ? getSampleRate() : 48000.0));
+        return true;
+    }
+    if (id.startsWith ("user:"))
+    {
+        const auto dir = presetRoot.getChildFile (mf::safePresetDirName (id.fromFirstOccurrenceOf (":", false, false)));
+        if (auto p = mf::loadPreset (dir, error))
+        {
+            applyPreset (*p);
+            return true;
+        }
+        return false;
+    }
+    error = "Unknown preset id";
+    return false;
+}
+
+bool MutaformProcessor::saveUserPreset (const juce::String& name, juce::String& error)
+{
+    if (name.trim().isEmpty())
+    {
+        error = "Empty preset name";
+        return false;
+    }
+    if (! mf::savePreset (presetRoot, capturePreset (name.trim()), error))
+        return false;
+    currentPreset = name.trim();
+    return true;
+}
+
+void MutaformProcessor::randomizeParameters (juce::uint64 seed)
+{
+    while (seed == 0)
+        seed = (juce::uint64) juce::Random::getSystemRandom().nextInt64();
+    mf::Rng r (seed);
+
+    auto set = [this] (const juce::String& id, float value)
+    {
+        if (auto* rp = apvts.getParameter (id))
+        {
+            rp->beginChangeGesture();
+            rp->setValueNotifyingHost (rp->convertTo0to1 (value));
+            rp->endChangeGesture();
+        }
+    };
+    auto logRange = [&r] (double lo, double hi) { return (float) std::exp (r.uniform (std::log (lo), std::log (hi))); };
+
+    for (int i = 0; i < mf::kNumLayers; ++i)
+    {
+        if (! layers[(size_t) i].hasSample())
+            continue;
+        set (mf::pid::layer (i, "gain"), i == 0 ? (float) r.uniform (-3.0, 0.0) : (float) r.uniform (-14.0, -2.0));
+        set (mf::pid::layer (i, "pan"), i == 0 ? 0.0f : (float) r.uniform (-0.6, 0.6));
+        static constexpr int semis[] = { 0, 0, 0, 0, 12, -12, 7, -5, 5, 24 };
+        set (mf::pid::layer (i, "semi"), i == 0 ? 0.0f : (float) semis[r.range (0, 9)]);
+        set (mf::pid::layer (i, "cents"), (float) r.uniform (-12.0, 12.0));
+        set (mf::pid::layer (i, "reverse"), r.chance (0.2) ? 1.0f : 0.0f);
+        set (mf::pid::layer (i, "start"), r.chance (0.7) ? 0.0f : (float) r.uniform (0.0, 0.15));
+        set (mf::pid::layer (i, "end"), r.chance (0.7) ? 1.0f : (float) r.uniform (0.6, 1.0));
+        const bool loop = r.chance (0.25);
+        set (mf::pid::layer (i, "loop"), loop ? 1.0f : 0.0f);
+        if (loop)
+        {
+            const float ls = (float) r.uniform (0.1, 0.5);
+            set (mf::pid::layer (i, "loopStart"), ls);
+            set (mf::pid::layer (i, "loopEnd"), (float) std::min (0.98, ls + r.uniform (0.15, 0.45)));
+            set (mf::pid::layer (i, "xfade"), logRange (10.0, 200.0));
+        }
+    }
+    set (mf::pid::attack, r.chance (0.6) ? (float) r.uniform (0.0, 8.0) : logRange (10.0, 600.0));
+    set (mf::pid::decay, logRange (120.0, 2500.0));
+    set (mf::pid::sustain, (float) r.uniform (0.3, 1.0));
+    set (mf::pid::release, logRange (60.0, 2000.0));
+    set (mf::pid::chaos, (float) r.uniform (15.0, 85.0));
+
+    set (mf::pid::fltOn, r.chance (0.5) ? 1.0f : 0.0f);
+    set (mf::pid::fltType, (float) (r.chance (0.6) ? 0 : r.range (1, 2)));
+    set (mf::pid::fltCutoff, logRange (300.0, 14000.0));
+    set (mf::pid::fltRes, (float) r.uniform (0.0, 0.6));
+    set (mf::pid::fltMix, (float) r.uniform (0.6, 1.0));
+    set (mf::pid::distOn, r.chance (0.35) ? 1.0f : 0.0f);
+    set (mf::pid::distDrive, (float) r.uniform (0.1, 0.6));
+    set (mf::pid::distMix, (float) r.uniform (0.4, 1.0));
+    set (mf::pid::choOn, r.chance (0.35) ? 1.0f : 0.0f);
+    set (mf::pid::choRate, logRange (0.1, 2.0));
+    set (mf::pid::choDepth, (float) r.uniform (0.2, 0.7));
+    set (mf::pid::choMix, (float) r.uniform (0.2, 0.6));
+    set (mf::pid::dlyOn, r.chance (0.4) ? 1.0f : 0.0f);
+    set (mf::pid::dlySync, 1.0f);
+    set (mf::pid::dlyDiv, (float) r.range (2, 8));
+    set (mf::pid::dlyFeedback, (float) r.uniform (0.15, 0.55));
+    set (mf::pid::dlyMix, (float) r.uniform (0.1, 0.35));
+    set (mf::pid::revOn, r.chance (0.55) ? 1.0f : 0.0f);
+    set (mf::pid::revSize, (float) r.uniform (0.3, 0.9));
+    set (mf::pid::revDamp, (float) r.uniform (0.2, 0.7));
+    set (mf::pid::revWidth, (float) r.uniform (0.6, 1.0));
+    set (mf::pid::revMix, (float) r.uniform (0.1, 0.4));
+    currentPreset = "Random " + juce::String::toHexString ((juce::int64) seed).getLastCharacters (6).toUpperCase();
+    sendChangeMessage();
+}
+
+//==============================================================================
 juce::AudioProcessorEditor* MutaformProcessor::createEditor()
 {
     return new MutaformEditor (*this);
@@ -432,6 +584,7 @@ void MutaformProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     juce::ValueTree root (kStateRoot);
     root.setProperty (kVersion, 1, nullptr);
+    root.setProperty ("preset", currentPreset, nullptr);
     root.appendChild (apvts.copyState(), nullptr);
 
     juce::ValueTree layersTree (kLayers);
@@ -483,6 +636,7 @@ void MutaformProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     if (! root.hasType (kStateRoot))
         return;
+    currentPreset = root.getProperty ("preset").toString();
 
     auto layersTree = root.getChildWithName (kLayers);
     for (int i = 0; i < mf::kNumLayers; ++i)

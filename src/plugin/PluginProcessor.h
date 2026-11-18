@@ -4,6 +4,7 @@
 #include "core/SamplerEngine.h"
 #include "core/Evolver.h"
 #include "core/FxChain.h"
+#include "core/Presets.h"
 
 /** Message-thread model of one layer: its sample history (for EVOLVE undo/redo). */
 struct LayerModel
@@ -22,6 +23,7 @@ struct LayerModel
     int index = -1;
     juce::String sourcePath;
     std::vector<float> multipoints;
+    int revision = 0;       // bumped whenever the audible sample changes (UI refresh)
     int epoch = 0;          // bumped whenever the layer is replaced/navigated; stale jobs are dropped
     bool busy = false;      // an EVOLVE / re-render job is running
     juce::String lastError;
@@ -99,13 +101,25 @@ public:
 
     mf::FxChain& getFx() { return fx; }
 
+    // ---- presets / randomizer (message thread) ----
+    mf::PresetData capturePreset (const juce::String& name) const;
+    void applyPreset (const mf::PresetData& preset);
+    /** id = "factory:N" or "user:<folder name>" */
+    bool loadPresetById (const juce::String& id, juce::String& error);
+    bool saveUserPreset (const juce::String& name, juce::String& error);
+    juce::String getCurrentPresetName() const { return currentPreset; }
+    juce::File presetRoot = mf::userPresetRoot();
+    /** Random but musical parameter set; leaves samples, master and limiter untouched. */
+    void randomizeParameters (juce::uint64 seed = 0);
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
     struct JobResult
     {
         int layer = 0;
-        int epoch = 0;
+        int revision = 0;       // bumped whenever the audible sample changes (UI refresh)
+    int epoch = 0;
         int targetIndex = -1;                   // >= 0: re-render of an existing entry (chain)
         std::vector<mf::SamplePtr> chainAudio;  // re-render results for indices (targetIndex - n + 1 .. targetIndex)
         mf::EvolveResult evolved;               // new variation
@@ -134,6 +148,7 @@ private:
     std::atomic<int> runningJobs { 0 };
 
     juce::AudioBuffer<float> mixBuffer;
+    juce::String currentPreset;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MutaformProcessor)
 };

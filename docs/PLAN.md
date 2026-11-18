@@ -19,8 +19,8 @@ Each stage ends with: commit → push → GitHub Actions green (build + tests + 
 - [x] 1 Skeleton
 - [x] 2 Sampler
 - [x] 3 Layers
-- [ ] 4 Evolve
-- [ ] 5 FX/Mix
-- [ ] 6 UI
-- [ ] 7 Presets
+- [x] 4 Evolve
+- [x] 5 FX/Mix
+- [x] 6 UI
+- [x] 7 Presets
 - [ ] 8 Polish
