@@ -28,3 +28,7 @@ Choices made autonomously during development. Newest at the bottom.
    path is kept as a fallback, and a "Load…" button opens a native file chooser.
 10. **Max sample length 30 s** (one-shot instrument). Longer files are truncated.
     EVOLVE output is capped at 20 s.
+11. **CI generator fallback.** `windows-latest` no longer ships Visual Studio 2022. The
+    workflow uses the "Visual Studio 17 2022" generator when VS 2022 is installed, otherwise
+    the "Visual Studio 18 2026" generator with the VS 2022 **v143** toolset (`-T v143`) if that
+    component is present. Locally, the documented command remains `-G "Visual Studio 17 2022"`.
