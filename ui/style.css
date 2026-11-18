@@ -1,0 +1,7 @@
+:root { --bg:#0D0F13; --text:#E7EAF0; --accent:#38E0C0; --mutate:#FF5A7A; --marker:#FFB84D; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+  font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; overflow:hidden; }
+#app { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:16px; }
+.evolve-btn { width:168px; height:72px; border:0; border-radius:12px; font-size:22px; font-weight:700;
+  letter-spacing:.08em; color:#1a0c10; background:linear-gradient(135deg,var(--mutate),var(--marker)); cursor:pointer; }
+.mono { font-family:"Cascadia Mono",Consolas,ui-monospace,monospace; }

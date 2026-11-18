@@ -1,0 +1,7 @@
+build*/
+cmake-build-*/
+.vs/
+.vscode/
+*.user
+dist/
+pluginval-logs/
