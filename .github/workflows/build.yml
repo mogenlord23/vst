@@ -46,7 +46,7 @@ jobs:
       - name: Unit tests
         shell: pwsh
         run: |
-          & "$env:BUILD_DIR/$env:CONFIG/MutaformTests.exe" --reporter console
+          & "$env:BUILD_DIR/$env:CONFIG/MutaformTests.exe" --reporter console --durations no
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Download pluginval
@@ -58,10 +58,20 @@ jobs:
       - name: pluginval (strictness 10)
         shell: pwsh
         run: |
-          $vst3 = "$env:BUILD_DIR/Mutaform_artefacts/$env:CONFIG/VST3/Mutaform.vst3"
+          $vst3 = (Resolve-Path "$env:BUILD_DIR/Mutaform_artefacts/$env:CONFIG/VST3/Mutaform.vst3").Path
           New-Item -ItemType Directory -Force -Path pluginval-logs | Out-Null
-          & ./pluginval/pluginval.exe --strictness-level 10 --validate-in-process --timeout-ms 600000 --output-dir pluginval-logs --validate $vst3
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # pluginval.exe is a GUI-subsystem app: wait for it explicitly and capture its output.
+          $args = @("--strictness-level", "10", "--validate-in-process", "--timeout-ms", "900000",
+                    "--output-dir", "pluginval-logs", "--validate", "`"$vst3`"")
+          $p = Start-Process -FilePath ./pluginval/pluginval.exe -ArgumentList $args -NoNewWindow -Wait -PassThru `
+                 -RedirectStandardOutput pluginval-logs/stdout.txt -RedirectStandardError pluginval-logs/stderr.txt
+          Get-Content pluginval-logs/stdout.txt
+          Get-Content pluginval-logs/stderr.txt
+          Write-Host "pluginval exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
+          if (-not (Select-String -Path pluginval-logs/stdout.txt -Pattern "SUCCESS" -Quiet)) {
+            Write-Host "pluginval did not report SUCCESS"; exit 1
+          }
 
       - name: Package
         shell: pwsh
