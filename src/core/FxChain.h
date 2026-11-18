@@ -61,6 +61,7 @@ private:
     int delayWrite = 0;
     juce::SmoothedValue<float> delaySamples;
     float delayDamp[2] {};
+    bool delayWasIdle = true;
     Blend dlyBlend;
 
     // reverb

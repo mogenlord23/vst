@@ -23,4 +23,4 @@ Each stage ends with: commit → push → GitHub Actions green (build + tests + 
 - [x] 5 FX/Mix
 - [x] 6 UI
 - [x] 7 Presets
-- [ ] 8 Polish
+- [x] 8 Polish

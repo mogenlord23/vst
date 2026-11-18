@@ -37,6 +37,7 @@ void FxChain::reset()
     delayLine.clear();
     delayWrite = 0;
     delayDamp[0] = delayDamp[1] = 0.0f;
+    delayWasIdle = true;
     limGain = 1.0f;
     for (auto* b : { &fltBlend, &distBlend, &choBlend, &dlyBlend, &revBlend })
         b->amount.setCurrentAndTargetValue (0.0f);
@@ -148,6 +149,12 @@ void FxChain::process (juce::AudioBuffer<float>& io, int n, const FxSettings& s)
     const float targetDelay = (float) juce::jlimit (1.0, kMaxDelaySeconds * sr - 4.0, delayTimeMs (s) * 0.001 * sr);
     if (! dlyBlend.idle())
     {
+        if (delayWasIdle)
+        {
+            delayLine.clear(); // no stale echoes when the delay is switched back on
+            delayDamp[0] = delayDamp[1] = 0.0f;
+            delayWasIdle = false;
+        }
         delaySamples.setTargetValue (targetDelay);
         const int len = delayLine.getNumSamples();
         const float fb = juce::jlimit (0.0f, 0.95f, s.dlyFeedback);
@@ -182,6 +189,7 @@ void FxChain::process (juce::AudioBuffer<float>& io, int n, const FxSettings& s)
     else
     {
         delaySamples.setCurrentAndTargetValue (targetDelay);
+        delayWasIdle = true;
     }
 
     // ---------------- reverb
