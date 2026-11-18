@@ -67,6 +67,8 @@ set(MUTAFORM_UI_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/style.css
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/app.js
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/creature3d.js
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/vendor/three.module.min.js
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/fonts/PixelifySans.ttf
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/fonts/Silkscreen-Regular.ttf
     ${juce_SOURCE_DIR}/modules/juce_gui_extra/native/javascript/index.js

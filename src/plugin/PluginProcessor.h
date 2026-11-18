@@ -127,6 +127,7 @@ public:
     bool loadPresetById (const juce::String& id, juce::String& error);
     bool saveUserPreset (const juce::String& name, juce::String& error);
     juce::String getCurrentPresetName() const { return currentPreset; }
+    juce::String uiSkin { "pink" };   // UI colour scheme, stored in the plugin state
     juce::File presetRoot = mf::userPresetRoot();
     /** Random but musical parameter set; leaves samples, master and limiter untouched. */
     void randomizeParameters (juce::uint64 seed = 0);

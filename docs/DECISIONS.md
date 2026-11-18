@@ -82,3 +82,13 @@ Choices made autonomously during development. Newest at the bottom.
     vs. body level), MOVING/STEADY (frame-to-frame level/brightness flux); variation names are
     deterministic two-word names derived from the seed.
 30. Editor is now 600 × 800 (3:4), resizable 450 × 600 … 1200 × 1600.
+31. **v1.2 pop-art theme** (user request): skins PINK/LIME/BLUE/ORANGE with own doodle
+    patterns, glossy 3D shell and buttons, glass screen. The shell fills the entire editor
+    so no dark corners appear inside the host window (a VST3 editor window is always a
+    rectangle; real transparent rounded corners are not possible inside a DAW).
+32. **3D mascot with three.js r170** (MIT, embedded as `ui/vendor/three.module.min.js`, no
+    network). Rendered at 252×271 and upscaled ×2 with nearest-neighbour; falls back to the
+    2D pixel mascot if WebGL is unavailable.
+33. The user suggested a celebrity as the mascot; declined — no likeness of real people.
+    The pop-art *style* (stripes, halftone, acid colours, eyeshadow, red lips) was adopted on
+    an original character instead.

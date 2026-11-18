@@ -1,5 +1,6 @@
 // MUTAFORM UI — retro handheld. Vanilla JS, no bundler. Talks to C++ via JUCE relays + native functions.
 import * as Juce from "./juce/index.js";
+import { Creature3D, POP_COLORS } from "./creature3d.js";
 
 const NL = 5;
 const $ = (s, r = document) => r.querySelector(s);
@@ -11,7 +12,7 @@ const lid = (i, s) => `l${i + 1}_${s}`;
 
 const state = {
   model: null, view: "creature", sub: "generated", sel: 0, target: -1, // target -1 = ALL layers
-  peaks: {}, meters: null, scale: 1, libCat: "all", lastLevel: null, octave: 0,
+  peaks: {}, meters: null, scale: 1, libCat: "all", lastLevel: null, octave: 0, skin: "pink",
 };
 
 // ================================================================ relays
@@ -160,77 +161,67 @@ const W = 168, H = 181;
 const scene = { ctx: null, bg: null, t: 0, stars: [], spores: [], bounce: 0, shake: 0, poof: 0, blinkT: 0 };
 function mulberry(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
+const SKINS = {
+  pink:   { stripe: "#FF1FA8", floor: "#FFE600", floor2: "#E8C500", sun: "#FFE600", doodle: "#82064F" },
+  lime:   { stripe: "#B8F400", floor: "#FF1FA8", floor2: "#D0128A", sun: "#FFFFFF", doodle: "#557300" },
+  blue:   { stripe: "#1E7BFF", floor: "#FF8A00", floor2: "#DD7000", sun: "#FFE600", doodle: "#063483" },
+  orange: { stripe: "#FF8A00", floor: "#1E7BFF", floor2: "#1660D8", sun: "#FFE600", doodle: "#864400" },
+};
+const SKIN_ORDER = ["pink", "lime", "blue", "orange"];
+
+// original doodle tile (lightning, star, flower, cherries, banana-curve, spiral, heart, note)
+function doodleTile(color) {
+  const st = `fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".38"`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><g ${st}>
+    <path d="M20 14 l-8 16 h9 l-6 15 l16 -20 h-9 l6 -11z"/>
+    <path d="M120 20 l4 9 l10 1 l-7 7 l2 10 l-9 -5 l-9 5 l2 -10 l-7 -7 l10 -1z"/>
+    <g transform="translate(70 80)"><circle r="4"/><circle cx="0" cy="-9" r="5"/><circle cx="9" cy="0" r="5"/><circle cx="0" cy="9" r="5"/><circle cx="-9" cy="0" r="5"/></g>
+    <g transform="translate(150 95)"><circle cx="-6" cy="10" r="6"/><circle cx="8" cy="12" r="6"/><path d="M-6 4 q4 -14 10 -18 q2 10 4 26"/><path d="M4 -14 q8 -2 12 4"/></g>
+    <path d="M18 120 q6 22 30 22 q-18 -6 -22 -24 z"/>
+    <path d="M110 150 m0 0 a4 4 0 1 1 8 0 a8 8 0 1 1 -16 0 a12 12 0 1 1 24 0"/>
+    <path d="M60 165 c-6 -8 -18 -2 -10 8 l10 8 l10 -8 c8 -10 -4 -16 -10 -8z"/>
+    <path d="M150 150 v-18 l14 -4 v18"/><circle cx="147" cy="152" r="3.5"/><circle cx="161" cy="148" r="3.5"/>
+  </g></svg>`;
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+}
+
 function buildBackground() {
+  const sk = SKINS[state.skin] || SKINS.pink;
   const c = document.createElement("canvas"); c.width = W; c.height = H;
   const g = c.getContext("2d");
-  const sky = ["#24173F", "#2E1B4E", "#3B2160", "#4D2870", "#64307A", "#7E3A7F", "#9C4680", "#BA5580", "#D5677E", "#EA7F7B", "#F79A7A"];
-  const bandTop = 0, bandH = 9;
-  sky.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, bandTop + i * bandH, W, bandH + 1); });
-  // dithered band edges
-  for (let i = 1; i < sky.length; i++) { g.fillStyle = sky[i]; const y = i * bandH - 1; for (let x = (i % 2); x < W; x += 2) g.fillRect(x, y, 1, 1); }
-  // ringed planet
-  const px = 128, py = 34, pr = 11;
-  for (let y = -pr; y <= pr; y++) for (let x = -pr; x <= pr; x++) {
-    const d = Math.hypot(x, y); if (d > pr) continue;
-    const l = (-x - y) / (pr * 1.4);
-    g.fillStyle = l > 0.35 ? "#FFE9C2" : l > -0.1 ? "#F6C98E" : l > -0.5 ? "#E0A06C" : "#B9765A";
-    g.fillRect(px + x, py + y, 1, 1);
+  // pop-art stripes (black / skin colour)
+  for (let y = 0; y < 132; y++) { g.fillStyle = Math.floor(y / 6) % 2 ? "#141014" : sk.stripe; g.fillRect(0, y, W, 1); }
+  // halftone sun
+  const cx = 132, cy = 62;
+  g.fillStyle = sk.sun;
+  for (let y = -26; y <= 26; y += 3) for (let x = -26; x <= 26; x += 3) {
+    const d = Math.hypot(x, y); if (d > 26) continue;
+    const rr = d < 15 ? 2 : d < 21 ? 1.4 : 1;
+    g.beginPath(); g.arc(cx + x + ((y / 3) % 2 ? 1.5 : 0), cy + y, rr, 0, 6.28); g.fill();
   }
-  g.fillStyle = "#FCE3B6";
-  for (let a = 0; a < Math.PI * 2; a += 0.02) {
-    const x = Math.round(px + Math.cos(a) * 19), y = Math.round(py + Math.sin(a) * 4 - Math.cos(a) * 3);
-    if (Math.sin(a) < 0 && Math.hypot(x - px, y - py) < pr) continue; // ring behind the planet
-    g.fillRect(x, y, 1, 1);
-  }
-  // small moon
-  g.fillStyle = "#E8D7F0"; g.fillRect(36, 22, 4, 4); g.fillStyle = "#CDB8DE"; g.fillRect(38, 24, 2, 2);
-  // far mesas
-  const mesa = (base, color, seed, minH, maxH) => {
-    const r = mulberry(seed); g.fillStyle = color; let x = 0;
-    while (x < W) {
-      const w = 10 + Math.floor(r() * 26), h = minH + Math.floor(r() * (maxH - minH));
-      const slope = 2 + Math.floor(r() * 4);
-      for (let i = 0; i < w; i++) {
-        const edge = Math.min(i, w - 1 - i);
-        const hh = edge < slope ? Math.floor(h * (edge + 1) / (slope + 1)) : h;
-        g.fillRect(x + i, base - hh, 1, hh + 1);
-      }
-      x += w - 2 + Math.floor(r() * 6);
-    }
-  };
-  mesa(104, "#6A3870", 7, 8, 22);
-  mesa(110, "#86456F", 11, 4, 14);
-  // dunes
-  const dune = (base, amp, freq, phase, color, shade) => {
-    for (let x = 0; x < W; x++) {
-      const y = Math.round(base + Math.sin(x * freq + phase) * amp + Math.sin(x * freq * 2.3 + phase * 1.7) * amp * 0.35);
-      g.fillStyle = color; g.fillRect(x, y, 1, H - y);
-      g.fillStyle = shade; if (Math.cos(x * freq + phase) < -0.2) g.fillRect(x, y, 1, 2);
-    }
-  };
-  dune(112, 3, 0.05, 1.2, "#B65A63", "#9C4A5A");
-  dune(122, 4, 0.035, 3.1, "#D27662", "#B8605A");
-  // cacti
-  const cactus = (x, y, h, col) => {
-    g.fillStyle = col; g.fillRect(x, y - h, 3, h);
-    g.fillRect(x - 3, y - h + 5, 3, 2); g.fillRect(x - 3, y - h + 2, 2, 4);
-    g.fillRect(x + 3, y - h + 8, 3, 2); g.fillRect(x + 4, y - h + 4, 2, 5);
-  };
-  cactus(18, 121, 14, "#5C2E52"); cactus(146, 119, 11, "#5C2E52"); cactus(70, 116, 7, "#7A3B5C");
-  // foreground ground
-  for (let y = 132; y < H; y++) {
-    const k = (y - 132) / (H - 132);
-    g.fillStyle = k < 0.15 ? "#E58E66" : k < 0.45 ? "#EE9C6C" : k < 0.75 ? "#F2A774" : "#F4B07C";
-    g.fillRect(0, y, W, 1);
-  }
-  const r = mulberry(99);
-  for (let i = 0; i < 160; i++) { g.fillStyle = r() < 0.5 ? "#D8805E" : "#F8C28F"; g.fillRect(Math.floor(r() * W), 133 + Math.floor(r() * (H - 133)), 1, 1); }
-  // pebbles
-  [[30, 150], [132, 160], [100, 142], [52, 168], [150, 141]].forEach(([x, y]) => { g.fillStyle = "#A9585A"; g.fillRect(x, y, 4, 2); g.fillStyle = "#C97066"; g.fillRect(x + 1, y - 1, 2, 1); });
+  g.beginPath(); g.arc(cx, cy, 13, 0, 6.28); g.fill();
+  // comic burst behind the creature
+  g.fillStyle = "rgba(255,255,255,.16)";
+  g.beginPath();
+  for (let k = 0; k < 28; k++) { const a = k / 28 * Math.PI * 2, r = k % 2 ? 46 : 72; const x = 84 + Math.cos(a) * r, y = 112 + Math.sin(a) * r * 0.75; k ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.closePath(); g.fill();
+  // floor with halftone shading
+  for (let y = 132; y < H; y++) { g.fillStyle = y < 134 ? "#141014" : sk.floor; g.fillRect(0, y, W, 1); }
+  g.fillStyle = sk.floor2;
+  for (let y = 136; y < H; y += 3) for (let x = (y % 2) * 2; x < W; x += 4) { const k = (y - 136) / (H - 136); if (k > 0.35) g.fillRect(x, y, k > 0.7 ? 2 : 1, k > 0.7 ? 2 : 1); }
   scene.bg = c;
   const rs = mulberry(5);
-  scene.stars = Array.from({ length: 34 }, () => ({ x: Math.floor(rs() * W), y: Math.floor(rs() * 62), p: rs() * 6.28, b: rs() < 0.25 }));
-  scene.spores = Array.from({ length: 10 }, () => ({ x: rs() * W, y: 60 + rs() * 110, v: 0.05 + rs() * 0.08, p: rs() * 6.28 }));
+  scene.stars = Array.from({ length: 10 }, () => ({ x: 8 + Math.floor(rs() * (W - 16)), y: 10 + Math.floor(rs() * 100), p: rs() * 6.28, b: true }));
+  scene.spores = Array.from({ length: 8 }, () => ({ x: rs() * W, y: 60 + rs() * 110, v: 0.05 + rs() * 0.08, p: rs() * 6.28 }));
+}
+
+function applySkin(name, persist = true) {
+  state.skin = SKINS[name] ? name : "pink";
+  document.body.classList.remove(...SKIN_ORDER.map((k) => "skin-" + k));
+  document.body.classList.add("skin-" + state.skin);
+  document.documentElement.style.setProperty("--doodle", doodleTile(SKINS[state.skin].doodle));
+  if (scene.ctx) buildBackground();
+  if (persist) call("setSkin", state.skin);
 }
 
 // --------------------------------------------------------------- creature
@@ -243,7 +234,15 @@ function traitsFromModel() {
   const main = M?.layers?.find((l) => l.loaded) || {};
   const bright = main.brightness ?? 0.5, punch = main.punch ?? 0.4, motion = main.motion ?? 0.4;
   const hue = (bright < 0.5 ? 220 + (0.5 - bright) * 120 : 25 + (1 - bright) * 140) + (r() - 0.5) * 50;
+  const P = POP_COLORS;
+  const floor = SKINS[state.skin]?.floor;
+  const pick = (arr) => { const a = arr.filter((c) => c !== floor); return a[Math.floor(r() * a.length)]; };
+  const hexOf = (n) => "#" + n.toString(16).padStart(6, "0");
+  const bodyColor = bright >= 0.5 ? pick([P.yellow, P.orange, P.lime, P.pink].map(hexOf)) : pick([P.blue, P.violet, P.cyan, P.pink].map(hexOf));
+  const accentColor = pick([P.pink, P.cyan, P.yellow, P.lime, P.orange].map(hexOf).filter((c) => c !== bodyColor));
   return {
+    seed, motion, bodyColor: parseInt(bodyColor.slice(1), 16), accentColor: parseInt(accentColor.slice(1), 16),
+    lidColor: P.cyan, footColor: bright >= 0.5 ? P.blue : P.yellow, hair: r() < 0.75, colorKey: state.skin,
     hue: (hue + 360) % 360, sat: 52 + Math.floor(r() * 20), body: Math.floor(r() * 5), eyes: r() < 0.25 ? 1 : 2, eyeBig: r() < 0.5,
     spikes: punch > 0.45 ? 3 + Math.floor(r() * 3) : 0, pattern: Math.floor(r() * 3), antenna: r() < 0.6, wobble: 0.6 + motion * 1.6,
     horns: r() < 0.5, ears: r() < 0.4, accentHue: (hue + 140 + r() * 80) % 360, r,
@@ -414,7 +413,7 @@ function drawScene(t) {
     p.y -= p.v; p.x += Math.sin(t + p.p) * 0.08; if (p.y < 40) { p.y = 170; p.x = Math.random() * W; }
     g.fillStyle = "rgba(255,230,210,.55)"; g.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
   });
-  if (state.view === "creature") drawCreature(g, t);
+  if (state.view === "creature" && !(c3d && c3d.ok)) drawCreature(g, t);
   // mutation poof
   if (scene.poof > 0) {
     const r = mulberry(Math.floor(scene.poof * 100));
@@ -425,6 +424,22 @@ function drawScene(t) {
     }
     scene.poof = Math.max(0, scene.poof - 0.06);
   }
+}
+
+// ================================================================ 3D creature
+let c3d = null, lastT = 0;
+function render3D(t) {
+  if (!c3d || !c3d.ok) return;
+  const cv = $("#creature3d");
+  cv.style.display = state.view === "creature" ? "" : "none";
+  if (state.view !== "creature") return;
+  const M = state.model;
+  const st = stageOf(M?.level ?? 0);
+  const anyLoaded = M?.layers?.some((l) => l.loaded);
+  const tr = traits || (traits = traitsFromModel());
+  c3d.build(tr, anyLoaded ? st.index : 0);
+  const dt = Math.min(0.1, Math.max(0.001, t - lastT)); lastT = t;
+  c3d.render(t, dt, { playing: (state.meters?.voices || 0) > 0, busy: !!M?.layers?.some((l) => l.busy) });
 }
 
 // ================================================================ main view
@@ -954,6 +969,7 @@ let lastFrame = 0, lastMeter = 0;
 function tick(t) {
   requestAnimationFrame(tick);
   if (t - lastFrame >= 1000 / 15) { lastFrame = t; scene.t = t / 1000; drawScene(scene.t); }
+  render3D(t / 1000);
   if (t - lastMeter > 50) {
     lastMeter = t;
     call("getMeters").then((m) => {
@@ -972,7 +988,11 @@ window.addEventListener("unhandledrejection", (e) => { try { call("log", `reject
 function boot() {
   installIconCss();
   scene.ctx = $("#scene").getContext("2d");
-  buildBackground();
+  applySkin("pink", false);
+  try { c3d = new Creature3D($("#creature3d"), 252, 271); } catch (e) { c3d = null; call("log", "3D unavailable: " + e); }
+  if (!c3d?.ok) $("#creature3d").style.display = "none";
+  call("getSkin").then((sk) => { if (sk) applySkin(sk, false); }).catch(() => {});
+  $("#btnSkin").addEventListener("click", () => { applySkin(SKIN_ORDER[(SKIN_ORDER.indexOf(state.skin) + 1) % SKIN_ORDER.length]); traits = null; });
   knob($("#kChaos"), "chaos", "CHAOS", fmt.pct100, { def: 40 });
   knob($("#kGlide"), "glide", "GLIDE", fmt.ms, { def: 0 });
   knob($("#kVibrato"), "vibrato", "VIBRATO", fmt.pct, { def: 0 });
@@ -1015,7 +1035,13 @@ function boot() {
   $("#saveName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#saveGo").click(); });
   $("#presetPrev").addEventListener("click", () => stepPreset(-1));
   $("#presetNext").addEventListener("click", () => stepPreset(1));
-  $("#dropCatch").addEventListener("click", () => {
+  // creature: click = play / browse, drag = spin it around
+  let dragX = null, moved = false;
+  const dc = $("#dropCatch");
+  dc.addEventListener("pointerdown", (e) => { dc.setPointerCapture(e.pointerId); dragX = e.clientX; moved = false; });
+  dc.addEventListener("pointermove", (e) => { if (dragX == null) return; const dx = e.clientX - dragX; if (Math.abs(dx) > 3) moved = true; if (c3d?.ok) c3d.nudge(dx / state.scale); dragX = e.clientX; });
+  dc.addEventListener("pointerup", () => {
+    dragX = null; if (moved) return;
     if (!state.model?.layers?.some((l) => l.loaded)) call("browseSample", firstEmpty());
     else { call("noteOn", 60, 0.9); setTimeout(() => call("noteOff", 60), 400); scene.bounce = 1; }
   });

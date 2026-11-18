@@ -213,6 +213,8 @@ juce::WebBrowserComponent::Options MutaformEditor::makeBrowserOptions()
         }
         return juce::var (list);
     });
+    addNative (o, "getSkin", [proc] (const Args&) { return juce::var (proc->uiSkin); });
+    addNative (o, "setSkin", [proc] (const Args& a) { if (! a.isEmpty()) proc->uiSkin = a[0].toString().substring (0, 16); return juce::var(); });
     addNative (o, "getCurrentPreset", [proc] (const Args&) { return juce::var (proc->getCurrentPresetName()); });
     addNative (o, "loadPreset", [proc] (const Args& a)
     {

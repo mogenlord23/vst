@@ -42,7 +42,8 @@ The WebView2 loader is linked statically; no extra DLL is needed next to the plu
 
 ## Features (v1.1)
 
-- **Creature view**: pixel-art mascot whose stage follows your mutation level and whose look
+- **Pop-art look**: glossy 3D shell in 4 colours (skin button, top-left), glass screen, candy buttons.
+- **Creature view**: 3D mascot (rotates, drag it to spin) whose stage follows your mutation level and whose look
   follows the sound (bright/dark colours, spikes for plucky sounds, wobble for moving sounds).
   CHAOS, GLIDE and VIBRATO knobs, level navigation, favourite, lock, presets, save, dice.
 - **ONE-SHOTS → GENERATED**: 5 layers with waveform and draggable start/end/loop/multipoint
@@ -124,5 +125,6 @@ for design decisions and [docs/PLAN.md](docs/PLAN.md) for the development stages
 ## License / credits
 
 Code, UI, graphics, texts and factory sounds are original to this project.
-Fonts: Pixelify Sans and Silkscreen (SIL Open Font License 1.1, see `ui/fonts/`). Built with
+Fonts: Pixelify Sans and Silkscreen (SIL Open Font License 1.1, see `ui/fonts/`).
+3D: [three.js](https://threejs.org) r170 (MIT, `ui/vendor/LICENSE-three.txt`). Built with
 [JUCE 8](https://juce.com) (AGPLv3 / commercial license) and [Catch2](https://github.com/catchorg/Catch2).

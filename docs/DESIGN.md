@@ -1,4 +1,30 @@
-# MUTAFORM — design concept (v1.1, "retro handheld")
+# MUTAFORM — design concept (v1.2, "pop-art handheld")
+
+> v1.2 update: pop-art colour grade (hot pink / lime / electric blue / orange skins with
+> original doodle patterns), glossy 3D plastic shell that fills the whole plugin window
+> (no dark corners), glass screen reflections, candy-gloss 3D buttons, and a **3D mascot**
+> rendered with three.js (toon shading + comic outline, low-res pixelated render, turntable
+> rotation, drag to spin). Pop-art stage: black/colour stripes, halftone sun, comic burst,
+> halftone floor. The sections below describe the v1.1 base that is still valid
+> (layout, pages, components); palette values are superseded by the skins.
+
+## Skins (v1.2)
+| Skin | Shell | Screen stripes | Floor |
+|---|---|---|---|
+| PINK | `#FF1FA8` | pink / black | yellow `#FFE600` |
+| LIME | `#B8F400` | lime / black | pink |
+| BLUE | `#1E7BFF` | blue / black | orange |
+| ORANGE | `#FF8A00` | orange / black | blue |
+Buttons: FX yellow, EVOLVE hot pink, MIX cyan-blue. The skin button (four dots, top-left)
+cycles them; the choice is stored in the plugin state.
+
+## 3D mascot (v1.2)
+Original character "the Mutant": a lumpy glossy blob (seeded vertex displacement) with big
+shiny eyes and cyan eyeshadow lids, glossy red lips, blush, feet/arms by stage, polka dots,
+antenna, a yellow swirl tuft, spikes for plucky sounds, horns, star sunglasses (ELDER) and a
+crown with orbiting gems (ANCIENT). Not modelled on any real person or existing character.
+
+# v1.1 base
 
 The UI is styled as a **retro handheld gadget**: a chunky plastic shell, a pixel-art screen
 with a living mascot, and three big physical buttons. This follows the genre the user asked

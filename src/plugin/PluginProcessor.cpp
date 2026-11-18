@@ -788,6 +788,7 @@ void MutaformProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::ValueTree root (kStateRoot);
     root.setProperty (kVersion, 1, nullptr);
     root.setProperty ("preset", currentPreset, nullptr);
+    root.setProperty ("skin", uiSkin, nullptr);
     root.appendChild (apvts.copyState(), nullptr);
 
     juce::ValueTree layersTree (kLayers);
@@ -842,6 +843,7 @@ void MutaformProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (! root.hasType (kStateRoot))
         return;
     currentPreset = root.getProperty ("preset").toString();
+    uiSkin = root.getProperty ("skin", "pink").toString();
 
     auto layersTree = root.getChildWithName (kLayers);
     for (auto& L : layers)
