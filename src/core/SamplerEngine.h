@@ -26,6 +26,8 @@ struct EngineSettings
     std::array<LayerSettings, kNumLayers> layers;
     float attackMs = 1.0f, decayMs = 400.0f, sustain = 1.0f, releaseMs = 250.0f;
     float velSens = 0.8f;
+    float glideMs = 0.0f;     // portamento from the previous note
+    float vibrato = 0.0f;     // 0..1 depth (max +-0.6 st, 5.6 Hz, delayed onset)
     float pitchBendRange = 2.0f;
 };
 
@@ -93,6 +95,9 @@ private:
         int stealFade = 0;      // samples of fast fade-out remaining before restart
         int pendingNote = -1;
         float pendingVelocity = 0;
+        double glideSemis = 0;  // current pitch offset sliding to 0
+        double vibPhase = 0;
+        int samplesPlayed = 0;
     };
 
     void updateRegions (const EngineSettings& s);
@@ -121,6 +126,7 @@ private:
     double hostRate = 44100.0;
     uint64_t ageCounter = 0;
     bool sustainPedal = false;
+    int lastNote = -1;
     float pitchBend = 0.0f; // -1..1
     juce::ADSR::Parameters adsrParams;
     static constexpr int kStealFadeSamples = 64;

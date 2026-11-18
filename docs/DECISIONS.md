@@ -66,3 +66,19 @@ Choices made autonomously during development. Newest at the bottom.
     but never the samples, mute/solo, master level or limiter.
 23. Stages were committed in pairs (2+3, 4+5, 6+7) where code was shared between them; each
     pushed commit was verified green in CI before the next push.
+24. **v1.1 UI redesign (user request)**: switched to a retro-handheld / virtual-pet style
+    (pixel screen, mascot, physical round buttons) as requested, with an original palette
+    (terracotta shell, twilight desert), original procedural mascot, scene, icons, names and
+    texts. No third-party images or logos are used.
+25. **Levels**: level = Σ over layers of Σ over current history chain of (1 + round(9·chaos)).
+    Group EVOLVE results are recorded as *generations*; ◀ ▶ on the level bar walk them.
+26. **LAYER box** chooses what EVOLVE mutates: ALL (unlocked, loaded layers) or one layer.
+    **Lock** excludes layers from group EVOLVE and from the dice.
+27. **Dice** = randomise parameters + 1–3 chained mutations on every unlocked layer;
+    one-step undo restores parameters and history positions.
+28. **GLIDE** (portamento from the last played note, 0–2 s) and **VIBRATO** (0–0.6 st,
+    5.6 Hz, 150 ms delayed onset) added to the sampler.
+29. **Auto-tags** DARK/BRIGHT (energy-weighted zero-crossing rate), PLUCKY/SMOOTH (early peak
+    vs. body level), MOVING/STEADY (frame-to-frame level/brightness flux); variation names are
+    deterministic two-word names derived from the seed.
+30. Editor is now 600 × 800 (3:4), resizable 450 × 600 … 1200 × 1600.

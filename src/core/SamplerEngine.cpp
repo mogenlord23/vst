@@ -33,6 +33,7 @@ void SamplerEngine::reset()
     }
     sustainPedal = false;
     pitchBend = 0.0f;
+    lastNote = -1;
     activeVoices.store (0);
 }
 
@@ -180,6 +181,10 @@ void SamplerEngine::startVoice (Voice& v, int note, float velocity, const Engine
     v.age = ++ageCounter;
     v.stealFade = 0;
     v.pendingNote = -1;
+    v.glideSemis = (s.glideMs > 0.5f && lastNote >= 0) ? (double) (lastNote - note) : 0.0;
+    v.vibPhase = 0.0;
+    v.samplesPlayed = 0;
+    lastNote = note;
     v.adsr.setParameters (adsrParams);
     v.adsr.reset();
     v.adsr.noteOn();
@@ -361,14 +366,23 @@ void SamplerEngine::renderVoices (juce::AudioBuffer<float>& out, int start, int 
         if (! v.active)
             continue;
 
-        // per-layer increments for this segment
+        // per-layer increments, refreshed every 32 samples (glide + vibrato)
         std::array<double, kNumLayers> inc {};
-        for (int i = 0; i < kNumLayers; ++i)
+        const double glideDecay = s.glideMs > 0.5f ? std::exp (-32.0 / (s.glideMs * 0.001 * hostRate / 3.0)) : 0.0;
+        const double vibInc = 2.0 * juce::MathConstants<double>::pi * 5.6 / hostRate * 32.0;
+        auto computeInc = [&]
         {
-            const auto& r = regions[(size_t) i];
-            const double semis = (double) (v.note - kRootNote) + r.pitchSemis + (double) (pitchBend * s.pitchBendRange);
-            inc[(size_t) i] = juce::jlimit (1.0e-4, 64.0, r.rateRatio * std::exp2 (semis / 12.0));
-        }
+            const double onset = juce::jlimit (0.0, 1.0, (v.samplesPlayed - 0.15 * hostRate) / (0.35 * hostRate));
+            const double vib = (double) s.vibrato * 0.6 * onset * std::sin (v.vibPhase);
+            for (int i = 0; i < kNumLayers; ++i)
+            {
+                const auto& r = regions[(size_t) i];
+                const double semis = (double) (v.note - kRootNote) + r.pitchSemis + (double) (pitchBend * s.pitchBendRange)
+                                     + v.glideSemis + vib;
+                inc[(size_t) i] = juce::jlimit (1.0e-4, 64.0, r.rateRatio * std::exp2 (semis / 12.0));
+            }
+        };
+        computeInc();
 
         for (int n = 0; n < num; ++n)
         {
@@ -382,13 +396,7 @@ void SamplerEngine::renderVoices (juce::AudioBuffer<float>& out, int start, int 
                     if (v.pendingNote >= 0)
                     {
                         startVoice (v, v.pendingNote, v.pendingVelocity, s);
-                        // recompute increments for the new note
-                        for (int i = 0; i < kNumLayers; ++i)
-                        {
-                            const auto& r = regions[(size_t) i];
-                            const double semis = (double) (v.note - kRootNote) + r.pitchSemis + (double) (pitchBend * s.pitchBendRange);
-                            inc[(size_t) i] = juce::jlimit (1.0e-4, 64.0, r.rateRatio * std::exp2 (semis / 12.0));
-                        }
+                        computeInc();
                     }
                     else
                     {
@@ -396,6 +404,15 @@ void SamplerEngine::renderVoices (juce::AudioBuffer<float>& out, int start, int 
                         break;
                     }
                 }
+            }
+
+            if ((++v.samplesPlayed & 31) == 0)
+            {
+                v.glideSemis = std::abs (v.glideSemis) < 1.0e-3 ? 0.0 : v.glideSemis * glideDecay;
+                v.vibPhase += vibInc;
+                if (v.vibPhase > 2.0 * juce::MathConstants<double>::pi)
+                    v.vibPhase -= 2.0 * juce::MathConstants<double>::pi;
+                computeInc();
             }
 
             const float env = v.adsr.getNextSample() * v.velGain * stealGain;

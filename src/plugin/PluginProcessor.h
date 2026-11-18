@@ -5,6 +5,8 @@
 #include "core/Evolver.h"
 #include "core/FxChain.h"
 #include "core/Presets.h"
+#include "core/SoundFeatures.h"
+#include <optional>
 
 /** Message-thread model of one layer: its sample history (for EVOLVE undo/redo). */
 struct LayerModel
@@ -16,6 +18,9 @@ struct LayerModel
         float chaos = 0.0f;
         juce::uint32 processMask = 0xff;
         bool root = false;      // audio cannot be re-derived from the previous entry
+        bool favorite = false;
+        bool hasFeatures = false;
+        mf::SoundFeatures features;
         juce::String label;
     };
 
@@ -26,6 +31,7 @@ struct LayerModel
     int revision = 0;       // bumped whenever the audible sample changes (UI refresh)
     int epoch = 0;          // bumped whenever the layer is replaced/navigated; stale jobs are dropped
     bool busy = false;      // an EVOLVE / re-render job is running
+    bool locked = false;    // excluded from group EVOLVE and the dice
     juce::String lastError;
 
     mf::SamplePtr current() const { return index >= 0 ? history[(size_t) index].audio : nullptr; }
@@ -85,7 +91,20 @@ public:
     mf::SamplerEngine& getEngine() { return engine; }
 
     /** Starts an EVOLVE job for the layer. seed == 0 picks a random seed. Returns false if busy/empty. */
-    bool evolveLayer (int layer, juce::uint64 seed = 0);
+    bool evolveLayer (int layer, juce::uint64 seed = 0, int steps = 1, float chaosOverride = -1.0f);
+    /** EVOLVE every loaded, unlocked layer (layerMask bit i = layer i). Returns number started. */
+    int evolveGroup (juce::uint32 layerMask = 0x1f, int steps = 1);
+    /** Dice: randomise parameters and evolve all unlocked layers 1-3 steps. Undoable once. */
+    void rollDice();
+    bool undoDice();
+    bool canUndoDice() const { return diceUndo.has_value(); }
+    void setLocked (int layer, bool locked);
+    void toggleFavorite (int layer, int index);
+    /** Global "level" navigation over group EVOLVE snapshots. */
+    bool stepGeneration (int delta);
+    bool canStepGeneration (int delta) const;
+    int getLevel() const;
+    int getLevel (int layer) const;
     bool undo (int layer);
     bool redo (int layer);
     bool jumpToHistory (int layer, int index);
@@ -118,15 +137,22 @@ private:
     struct JobResult
     {
         int layer = 0;
-        int revision = 0;       // bumped whenever the audible sample changes (UI refresh)
-    int epoch = 0;
+        int epoch = 0;
         int targetIndex = -1;                   // >= 0: re-render of an existing entry (chain)
         std::vector<mf::SamplePtr> chainAudio;  // re-render results for indices (targetIndex - n + 1 .. targetIndex)
-        mf::EvolveResult evolved;               // new variation
-        juce::uint64 seed = 0;
+        std::vector<mf::EvolveResult> evolved;  // new variations (one per step)
+        std::vector<mf::SoundFeatures> features;
+        std::vector<juce::uint64> seeds;
         float chaos = 0;
         juce::uint32 mask = 0xff;
+        bool failed = false;
     };
+    struct Generation { std::array<int, mf::kNumLayers> idx {}; };
+    struct DiceUndo { std::map<juce::String, float> params; std::array<int, mf::kNumLayers> idx {}; };
+
+    void pushGeneration();
+    void resetGenerations();
+    void finishGroupMember (int layer);
 
     void timerCallback() override { housekeeping(); }
     void publishLayer (int layer);
@@ -149,6 +175,10 @@ private:
 
     juce::AudioBuffer<float> mixBuffer;
     juce::String currentPreset;
+    std::vector<Generation> generations;
+    int generationIndex = -1;
+    juce::uint32 groupPending = 0;
+    std::optional<DiceUndo> diceUndo;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MutaformProcessor)
 };

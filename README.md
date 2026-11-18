@@ -5,9 +5,9 @@ sample into a playable, multi-layer instrument — and lets you **EVOLVE** it in
 variations, endlessly. No AI: every variation is an algorithmic, seeded chain of DSP
 processes, so any result can be reproduced from its seed.
 
-![MUTAFORM user interface](docs/screenshot.png)
+<p><img src="docs/screenshot.png" width="300" alt="Creature view"> <img src="docs/screenshot-oneshots.png" width="300" alt="One-shots view"></p>
 
-*(Interface rendered from the Linux dev build; Windows uses the same embedded web UI.)*
+*(Rendered from the Linux dev build; Windows uses the same embedded web UI.)*
 
 ## Install (Windows 10/11, x64)
 
@@ -27,41 +27,43 @@ The WebView2 loader is linked statically; no extra DLL is needed next to the plu
 
 ## Quick start
 
-1. Drag a WAV / AIFF / FLAC / MP3 one-shot onto the big drop zone (or onto a layer slot on
-   the left; dropping several files fills consecutive layers). **LOAD…** opens a file chooser.
-2. Play MIDI — the sample's original pitch sits on **C3 (MIDI 60)**. In the Standalone you can
-   also play the on-screen keys or your computer keyboard (`A W S E D F T G Y H U J K …`,
-   `Z`/`X` = octave, `Space` = EVOLVE).
-3. Press **EVOLVE**. A new variation is rendered in the background and replaces the layer's
-   sound. Press again for another one, forever. **UNDO / REDO** walk the history
-   (32 steps per layer); the **EVOLVE** tab shows every variation with its seed — click one
-   to jump back, or type a seed and press **RENDER SEED** to reproduce a result.
-4. Turn **CHAOS** up for longer, wilder chains; restrict the process pool in the **CHAOS** tab.
+1. Drop a WAV / AIFF / FLAC / MP3 one-shot onto the screen (or click the little spore to browse).
+   On the **ONE-SHOTS** page you can drop onto a specific layer row (5 layers).
+2. Play MIDI — original pitch on **C3 (MIDI 60)**. The tiny keys under the buttons, or your
+   computer keyboard (`A W S E D F T G Y H U J K …`, `Z`/`X` octave), audition the sound;
+   `Space` = EVOLVE.
+3. Press the big **EVOLVE** button. Your sound mutates (rendered in the background) and the
+   creature grows: SPORE → SPROUT → CUB → SCAMP → YOUTH → ADULT → ELDER → ANCIENT.
+   The **LAYER** box picks what mutates (ALL or one layer); **CHAOS** sets how wild it gets.
+4. **◀ ▶** on the level bar walk back and forth through your mutations; the **star** marks a
+   favourite, the **lock** protects layers from mutating.
+5. The **dice** rolls a random sound (parameters + mutations); the arrow next to it undoes the roll.
+6. **FX** and **MIX** buttons open the effects and mixer panels.
 
-## Features (v1.0)
+## Features (v1.1)
 
-- **5 layers**, each with drag & drop loading, start/end, **LOOP** (loop in/out + equal-power
-  crossfade), **REVERSE**, **MULTIPOINT** start points (up to 8; chosen by key, velocity or
-  cycling), mute, solo, level, pan, pitch (semitones + cents). Markers are draggable on the
-  waveform; double-click adds a start point, right-click removes it.
-- **Sampler**: 16-voice polyphony, click-free voice stealing, amp ADSR, velocity sensitivity,
-  sustain pedal, pitch bend ±2 st, cubic (Hermite) resampling with sample-rate conversion.
-- **EVOLVE**: random chain of 2–5 processes out of 8 — pitch shift, granular shuffle,
-  envelope-swept resonant filter, saturation/waveshaping (tanh/fold/asym/bit-crush),
-  time-stretch, ring modulation, reverse reverb swell, transient shaping. Rendered offline on
-  a worker thread, normalised to −1 dBFS. 64-bit seed per variation, fully deterministic.
-- **CHAOS** 0–100 %: controls chain length (0 % → 2 processes, 100 % → 5) and strength.
-- **FX**: filter (LP/HP/BP + resonance), drive, chorus, delay (free or synced to the DAW tempo),
-  reverb — each with on/off and mix (smoothed, no clicks).
-- **MIX**: layer faders with mute/solo, master level, output peak limiter with ceiling and
-  gain-reduction meter.
-- **RANDOM**: musical randomisation of layer, envelope, CHAOS and FX parameters.
-- **Presets**: JSON + audio in `%APPDATA%\Mutaform\Presets\<name>\`; 5 factory presets
-  whose sounds are synthesised in code (*Glass Bloom, Rust Kick, Tape Choir, Seed Pluck,
-  Orbit Metal*).
-- **Full recall**: the DAW project stores parameters, samples (lossless), multipoints and the
-  EVOLVE history (as seeds; intermediate steps are re-rendered on demand).
-- Resizable dark UI (600×400 … 1800×1200).
+- **Creature view**: pixel-art mascot whose stage follows your mutation level and whose look
+  follows the sound (bright/dark colours, spikes for plucky sounds, wobble for moving sounds).
+  CHAOS, GLIDE and VIBRATO knobs, level navigation, favourite, lock, presets, save, dice.
+- **ONE-SHOTS → GENERATED**: 5 layers with waveform and draggable start/end/loop/multipoint
+  markers; per layer LOOP (with crossfade), MULTIPOINT (key / velocity / cycle), REVERSE,
+  back-to-original, library, MUTE, SOLO, octave, LOCK, export to WAV; toolbar GAIN/OCT.
+- **ONE-SHOTS → LIBRARY**: every variation of a layer with a generated name and automatic tags
+  (DARK, BRIGHT, PLUCKY, SMOOTH, MOVING, STEADY), favourites, RANDOM pick.
+- **Sampler**: 16 voices, amp ADSR, velocity, glide, vibrato, sustain pedal, pitch bend ±2 st,
+  cubic (Hermite) resampling, per-layer level/pan/semitones/cents.
+- **EVOLVE**: random chain of 2–5 out of 8 processes — pitch shift, granular shuffle,
+  envelope-swept filter, saturation/waveshaping, time-stretch, ring mod, reverse reverb swell,
+  transient shaping — rendered offline on a worker thread, normalised, 64-bit seed per
+  variation (fully reproducible). The process pool can be restricted in the FX panel.
+- **FX**: filter LP/HP/BP + resonance, drive, chorus, delay (free or DAW-synced), reverb —
+  each with on/off + mix. **MIX**: layer faders, pan, fine tune, mute/solo, amp envelope,
+  master, output limiter with gain-reduction meter, loop/region knobs for the selected layer.
+- **Presets**: JSON + audio in `%APPDATA%\Mutaform\Presets\<name>\`; 5 factory presets with
+  sounds synthesised in code (*Glass Bloom, Rust Kick, Tape Choir, Seed Pluck, Orbit Metal*).
+- **Full recall** in the DAW project: parameters, samples (lossless), multipoints, EVOLVE
+  history, favourites, locks.
+- Resizable window (3:4, 450×600 … 1200×1600).
 
 ## Build locally
 
@@ -113,11 +115,14 @@ for design decisions and [docs/PLAN.md](docs/PLAN.md) for the development stages
 - Replacing a layer's sound while notes are held continues those notes at the same position
   in the new sound (with a short fade-in) rather than restarting them.
 - Presets store each layer's current sound but not its EVOLVE history (the DAW project does).
-- Pitch-bend range is fixed at ±2 semitones; no MPE.
+- Pitch-bend range is fixed at ±2 semitones; no MPE. Glide is polyphonic (each new note
+  slides from the previously played note).
+- Level navigation (◀ ▶) is reset when the project is reloaded; per-layer history is kept.
 - The plugin UI drop target is the WebView; dropping from some hosts' own browsers (which
   don't provide real files) is not supported — use LOAD… instead.
 
 ## License / credits
 
-Code, UI, graphics, texts and factory sounds are original to this project. Built with
+Code, UI, graphics, texts and factory sounds are original to this project.
+Fonts: Pixelify Sans and Silkscreen (SIL Open Font License 1.1, see `ui/fonts/`). Built with
 [JUCE 8](https://juce.com) (AGPLv3 / commercial license) and [Catch2](https://github.com/catchorg/Catch2).

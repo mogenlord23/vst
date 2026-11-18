@@ -20,6 +20,8 @@ namespace pid
     inline constexpr const char* sustain = "amp_sustain";
     inline constexpr const char* release = "amp_release";
     inline constexpr const char* velSens = "vel_sens";
+    inline constexpr const char* glide = "glide";
+    inline constexpr const char* vibrato = "vibrato";
     inline constexpr const char* chaos = "chaos";
     // evolve process enables
     inline constexpr std::array<const char*, 8> evoProcess { "evo_pitch", "evo_grain", "evo_filter", "evo_sat",
@@ -72,7 +74,7 @@ struct ParamRefs
     };
     std::array<Layer, kNumLayers> layers;
     std::atomic<float>* masterGain {}, *limiterOn {}, *limiterCeiling {}, *attack {}, *decay {}, *sustain {}, *release {},
-        *velSens {}, *chaos {};
+        *velSens {}, *chaos {}, *glide {}, *vibrato {};
     std::array<std::atomic<float>*, 8> evo {};
     std::atomic<float>* fltOn {}, *fltType {}, *fltCutoff {}, *fltRes {}, *fltMix {}, *distOn {}, *distDrive {}, *distMix {},
         *choOn {}, *choRate {}, *choDepth {}, *choMix {}, *dlyOn {}, *dlySync {}, *dlyTime {}, *dlyDiv {}, *dlyFeedback {},

@@ -68,6 +68,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (fl (pid::sustain, "Sustain", Range (0.0f, 1.0f), 1.0f));
     layout.add (fl (pid::release, "Release", timeRange (1.0f, 8000.0f, 400.0f), 250.0f, "ms"));
     layout.add (fl (pid::velSens, "Velocity", Range (0.0f, 1.0f), 0.8f));
+    layout.add (fl (pid::glide, "Glide", timeRange (0.0f, 2000.0f, 200.0f), 0.0f, "ms"));
+    layout.add (fl (pid::vibrato, "Vibrato", Range (0.0f, 1.0f), 0.0f));
 
     layout.add (fl (pid::chaos, "Chaos", Range (0.0f, 100.0f, 0.1f), 40.0f, "%"));
     const std::array<const char*, 8> evoNames { "Pitch Shift", "Grain Shuffle", "Envelope Filter", "Saturation",
@@ -143,6 +145,8 @@ void ParamRefs::bind (juce::AudioProcessorValueTreeState& apvts)
     sustain = get (pid::sustain);
     release = get (pid::release);
     velSens = get (pid::velSens);
+    glide = get (pid::glide);
+    vibrato = get (pid::vibrato);
     chaos = get (pid::chaos);
     for (size_t i = 0; i < evo.size(); ++i)
         evo[i] = get (pid::evoProcess[i]);

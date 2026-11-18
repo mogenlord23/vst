@@ -67,6 +67,8 @@ set(MUTAFORM_UI_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/style.css
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/app.js
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/fonts/PixelifySans.ttf
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/fonts/Silkscreen-Regular.ttf
     ${juce_SOURCE_DIR}/modules/juce_gui_extra/native/javascript/index.js
     ${juce_SOURCE_DIR}/modules/juce_gui_extra/native/javascript/check_native_interop.js)
 juce_add_binary_data(MutaformUI
@@ -81,6 +83,7 @@ set(MUTAFORM_CORE_SOURCES
     src/core/SamplerEngine.cpp
     src/core/Evolver.cpp
     src/core/FxChain.cpp
+    src/core/SoundFeatures.cpp
     src/core/Presets.cpp
     src/core/FactoryPresets.cpp)
 
@@ -133,6 +136,7 @@ if(MUTAFORM_BUILD_TESTS)
         tests/EvolverTests.cpp
         tests/FxTests.cpp
         tests/PresetTests.cpp
+        tests/GameplayTests.cpp
         tests/StateTests.cpp)
     target_link_libraries(MutaformTests PRIVATE Mutaform Catch2::Catch2)
     # Reuse the plugin's compiled shared code; inherit its JUCE include paths/definitions.

@@ -81,6 +81,8 @@ mf::EngineSettings MutaformProcessor::readEngineSettings() const
     s.sustain = params.sustain->load();
     s.releaseMs = params.release->load();
     s.velSens = params.velSens->load();
+    s.glideMs = params.glide->load();
+    s.vibrato = params.vibrato->load();
     return s;
 }
 
@@ -187,7 +189,7 @@ juce::uint32 MutaformProcessor::currentProcessMask() const
     return mask == 0 ? 0xffu : mask;
 }
 
-bool MutaformProcessor::evolveLayer (int layer, juce::uint64 seed)
+bool MutaformProcessor::evolveLayer (int layer, juce::uint64 seed, int steps, float chaosOverride)
 {
     auto& L = layers[(size_t) layer];
     if (L.busy || L.current() == nullptr)
@@ -199,9 +201,16 @@ bool MutaformProcessor::evolveLayer (int layer, juce::uint64 seed)
     JobResult job;
     job.layer = layer;
     job.epoch = L.epoch;
-    job.seed = seed;
-    job.chaos = params.chaos->load() * 0.01f;
+    job.chaos = chaosOverride >= 0.0f ? juce::jlimit (0.0f, 1.0f, chaosOverride) : params.chaos->load() * 0.01f;
     job.mask = currentProcessMask();
+    mf::Rng seeder (seed);
+    for (int i = 0; i < juce::jlimit (1, 8, steps); ++i)
+    {
+        juce::uint64 s = i == 0 ? seed : 0;
+        while (s == 0)
+            s = seeder.next();
+        job.seeds.push_back (s);
+    }
 
     L.busy = true;
     L.lastError.clear();
@@ -211,7 +220,15 @@ bool MutaformProcessor::evolveLayer (int layer, juce::uint64 seed)
     auto source = L.current();
     workers.addJob ([this, job, source]() mutable
                     {
-                        job.evolved = mf::evolve (*source, job.seed, job.chaos, job.mask, &cancelJobs);
+                        mf::SamplePtr cur = source;
+                        for (auto s : job.seeds)
+                        {
+                            auto res = mf::evolve (*cur, s, job.chaos, job.mask, &cancelJobs);
+                            if (res.audio == nullptr) { job.failed = job.evolved.empty(); break; }
+                            cur = res.audio;
+                            job.features.push_back (mf::analyseSound (*res.audio));
+                            job.evolved.push_back (std::move (res));
+                        }
                         {
                             const juce::ScopedLock sl (resultLock);
                             finishedJobs.push_back (std::move (job));
@@ -221,11 +238,159 @@ bool MutaformProcessor::evolveLayer (int layer, juce::uint64 seed)
     return true;
 }
 
+int MutaformProcessor::evolveGroup (juce::uint32 layerMask, int steps)
+{
+    if (groupPending != 0)
+        return 0;
+    int started = 0;
+    for (int i = 0; i < mf::kNumLayers; ++i)
+    {
+        const auto& L = layers[(size_t) i];
+        if ((layerMask & (1u << i)) == 0 || L.locked || ! L.hasSample() || L.busy)
+            continue;
+        if (evolveLayer (i, 0, steps))
+        {
+            groupPending |= 1u << i;
+            ++started;
+        }
+    }
+    return started;
+}
+
+void MutaformProcessor::finishGroupMember (int layer)
+{
+    if ((groupPending & (1u << layer)) == 0)
+        return;
+    groupPending &= ~(1u << layer);
+    if (groupPending == 0)
+        pushGeneration();
+}
+
+void MutaformProcessor::pushGeneration()
+{
+    Generation g;
+    for (int i = 0; i < mf::kNumLayers; ++i)
+        g.idx[(size_t) i] = layers[(size_t) i].index;
+    if (generationIndex >= 0 && generationIndex < (int) generations.size() && generations[(size_t) generationIndex].idx == g.idx)
+        return;
+    generations.resize ((size_t) std::max (0, generationIndex + 1));
+    generations.push_back (g);
+    while (generations.size() > 64)
+        generations.erase (generations.begin());
+    generationIndex = (int) generations.size() - 1;
+}
+
+void MutaformProcessor::resetGenerations()
+{
+    generations.clear();
+    generationIndex = -1;
+    groupPending = 0;
+    pushGeneration();
+}
+
+bool MutaformProcessor::canStepGeneration (int delta) const
+{
+    const int t = generationIndex + delta;
+    return groupPending == 0 && ! anyBusy() && t >= 0 && t < (int) generations.size();
+}
+
+bool MutaformProcessor::stepGeneration (int delta)
+{
+    if (! canStepGeneration (delta))
+        return false;
+    generationIndex += delta;
+    const auto g = generations[(size_t) generationIndex];
+    for (int i = 0; i < mf::kNumLayers; ++i)
+    {
+        const int idx = g.idx[(size_t) i];
+        auto& L = layers[(size_t) i];
+        if (idx >= 0 && idx < (int) L.history.size() && idx != L.index)
+            navigateTo (i, idx);
+    }
+    sendChangeMessage();
+    return true;
+}
+
+int MutaformProcessor::getLevel (int layer) const
+{
+    const auto& L = layers[(size_t) layer];
+    int lvl = 0;
+    for (int k = 1; k <= L.index && k < (int) L.history.size(); ++k)
+        lvl += 1 + juce::roundToInt (L.history[(size_t) k].chaos * 9.0f);
+    return lvl;
+}
+
+int MutaformProcessor::getLevel() const
+{
+    int total = 0;
+    for (int i = 0; i < mf::kNumLayers; ++i)
+        total += getLevel (i);
+    return total;
+}
+
+void MutaformProcessor::setLocked (int layer, bool locked)
+{
+    layers[(size_t) layer].locked = locked;
+    sendChangeMessage();
+}
+
+void MutaformProcessor::toggleFavorite (int layer, int index)
+{
+    auto& L = layers[(size_t) layer];
+    if (juce::isPositiveAndBelow (index, (int) L.history.size()))
+        L.history[(size_t) index].favorite = ! L.history[(size_t) index].favorite;
+    sendChangeMessage();
+}
+
+void MutaformProcessor::rollDice()
+{
+    DiceUndo u;
+    for (auto* p : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            u.params[rp->getParameterID()] = rp->convertFrom0to1 (rp->getValue());
+    for (int i = 0; i < mf::kNumLayers; ++i)
+        u.idx[(size_t) i] = layers[(size_t) i].index;
+    diceUndo = u;
+
+    randomizeParameters();
+    evolveGroup (0x1f, juce::Random::getSystemRandom().nextInt (juce::Range<int> (1, 4)));
+    sendChangeMessage();
+}
+
+bool MutaformProcessor::undoDice()
+{
+    if (! diceUndo.has_value() || anyBusy())
+        return false;
+    const auto u = *diceUndo;
+    diceUndo.reset();
+    for (auto* p : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (p))
+            if (auto it = u.params.find (rp->getParameterID()); it != u.params.end())
+            {
+                rp->beginChangeGesture();
+                rp->setValueNotifyingHost (rp->convertTo0to1 (it->second));
+                rp->endChangeGesture();
+            }
+    for (int i = 0; i < mf::kNumLayers; ++i)
+    {
+        auto& L = layers[(size_t) i];
+        const int idx = u.idx[(size_t) i];
+        if (idx >= 0 && idx < (int) L.history.size() && idx != L.index)
+            navigateTo (i, idx);
+    }
+    pushGeneration();
+    sendChangeMessage();
+    return true;
+}
+
 void MutaformProcessor::applyResult (JobResult& r)
 {
     auto& L = layers[(size_t) r.layer];
     if (r.epoch != L.epoch)
+    {
+        finishGroupMember (r.layer);
         return; // layer changed meanwhile
+    }
     L.busy = false;
 
     if (r.targetIndex >= 0)
@@ -241,6 +406,12 @@ void MutaformProcessor::applyResult (JobResult& r)
         if (juce::isPositiveAndBelow (r.targetIndex, (int) L.history.size()) && L.history[(size_t) r.targetIndex].audio != nullptr)
         {
             L.index = r.targetIndex;
+            auto& e = L.history[(size_t) r.targetIndex];
+            if (! e.hasFeatures)
+            {
+                e.features = mf::analyseSound (*e.audio);
+                e.hasFeatures = true;
+            }
             publishLayer (r.layer);
         }
         else
@@ -251,36 +422,61 @@ void MutaformProcessor::applyResult (JobResult& r)
         return;
     }
 
-    if (r.evolved.audio == nullptr)
+    if (r.evolved.empty())
     {
         L.lastError = "Evolve failed";
+        finishGroupMember (r.layer);
         sendChangeMessage();
         return;
     }
 
-    // truncate redo branch, append the new variation
+    // truncate redo branch, append the new variations
     L.history.resize ((size_t) L.index + 1);
-    LayerModel::Entry e;
-    e.audio = r.evolved.audio;
-    e.seed = r.seed;
-    e.chaos = r.chaos;
-    e.processMask = r.mask;
-    e.label = r.evolved.steps.joinIntoString (" > ");
-    L.history.push_back (std::move (e));
+    for (size_t k = 0; k < r.evolved.size(); ++k)
+    {
+        LayerModel::Entry e;
+        e.audio = r.evolved[k].audio;
+        e.seed = r.seeds[k];
+        e.chaos = r.chaos;
+        e.processMask = r.mask;
+        e.label = r.evolved[k].steps.joinIntoString (" > ");
+        if (k < r.features.size())
+        {
+            e.features = r.features[k];
+            e.hasFeatures = true;
+        }
+        L.history.push_back (std::move (e));
+    }
 
     // cap history: keep the original (entry 0), drop the oldest variation
+    int dropped = 0;
     while ((int) L.history.size() > kMaxHistory)
     {
         L.history.erase (L.history.begin() + 1);
+        ++dropped;
         // entries that can no longer be derived (parent gone, no audio) are dropped too;
         // this only happens with histories restored from a saved state
         while (L.history.size() > 1 && L.history[1].audio == nullptr)
+        {
             L.history.erase (L.history.begin() + 1);
+            ++dropped;
+        }
         if (L.history.size() > 1)
             L.history[1].root = true; // its parent is gone; it keeps its own audio
     }
+    if (dropped > 0)
+        for (auto& g : generations)
+        {
+            auto& gi = g.idx[(size_t) r.layer];
+            gi = gi <= 0 ? gi : std::max (1, gi - dropped);
+        }
+
     L.index = (int) L.history.size() - 1;
     publishLayer (r.layer);
+    if (groupPending & (1u << r.layer))
+        finishGroupMember (r.layer);
+    else
+        pushGeneration();
 }
 
 void MutaformProcessor::navigateTo (int layer, int index)
@@ -381,12 +577,18 @@ void MutaformProcessor::setLayerSample (int layer, mf::SamplePtr sample, const j
     e.audio = std::move (sample);
     e.root = true;
     e.label = "Original";
+    if (e.audio != nullptr)
+    {
+        e.features = mf::analyseSound (*e.audio);
+        e.hasFeatures = true;
+    }
     L.history.push_back (std::move (e));
     L.index = 0;
     ++L.epoch;
     L.busy = false;
     L.sourcePath = sourcePath;
     publishLayer (layer);
+    resetGenerations();
 }
 
 bool MutaformProcessor::loadSampleFile (int layer, const juce::File& file, juce::String& error)
@@ -411,6 +613,7 @@ void MutaformProcessor::clearLayer (int layer)
 {
     layers[(size_t) layer].clear();
     publishLayer (layer);
+    resetGenerations();
 }
 
 void MutaformProcessor::setMultipoints (int layer, std::vector<float> points)
@@ -595,6 +798,7 @@ void MutaformProcessor::getStateInformation (juce::MemoryBlock& destData)
         lt.setProperty (kIndex, i, nullptr);
         lt.setProperty (kSource, L.sourcePath, nullptr);
         lt.setProperty (kHistIndex, L.index, nullptr);
+        lt.setProperty ("locked", L.locked, nullptr);
         juce::StringArray mp;
         for (auto p : L.multipoints)
             mp.add (juce::String (p, 6));
@@ -611,6 +815,7 @@ void MutaformProcessor::getStateInformation (juce::MemoryBlock& destData)
             // audio is stored for the original and the current variation; the rest is
             // re-rendered deterministically from (seed, chaos, mask) when navigated to
             et.setProperty ("root", en.root, nullptr);
+            et.setProperty ("fav", en.favorite, nullptr);
             if ((e == 0 || e == L.index || en.root) && en.audio != nullptr)
                 et.setProperty (kAudio, mf::encodeSample (*en.audio), nullptr);
             lt.appendChild (et, nullptr);
@@ -639,8 +844,11 @@ void MutaformProcessor::setStateInformation (const void* data, int sizeInBytes)
     currentPreset = root.getProperty ("preset").toString();
 
     auto layersTree = root.getChildWithName (kLayers);
-    for (int i = 0; i < mf::kNumLayers; ++i)
-        layers[(size_t) i].clear();
+    for (auto& L : layers)
+    {
+        L.clear();
+        L.locked = false;
+    }
 
     for (auto lt : layersTree)
     {
@@ -649,6 +857,7 @@ void MutaformProcessor::setStateInformation (const void* data, int sizeInBytes)
             continue;
         auto& L = layers[(size_t) i];
         L.sourcePath = lt.getProperty (kSource).toString();
+        L.locked = (bool) lt.getProperty ("locked", false);
         for (auto et : lt)
         {
             LayerModel::Entry en;
@@ -657,6 +866,7 @@ void MutaformProcessor::setStateInformation (const void* data, int sizeInBytes)
             en.processMask = (juce::uint32) (int) et.getProperty (kMask, 0xff);
             en.label = et.getProperty (kLabel).toString();
             en.root = (bool) et.getProperty ("root", false);
+            en.favorite = (bool) et.getProperty ("fav", false);
             if (auto* mb = et.getProperty (kAudio).getBinaryData())
                 en.audio = mf::decodeSample (*mb);
             L.history.push_back (std::move (en));
@@ -680,7 +890,18 @@ void MutaformProcessor::setStateInformation (const void* data, int sizeInBytes)
     }
 
     for (int i = 0; i < mf::kNumLayers; ++i)
+    {
+        auto& L = layers[(size_t) i];
+        for (auto& e : L.history)
+            if (e.audio != nullptr && ! e.hasFeatures)
+            {
+                e.features = mf::analyseSound (*e.audio);
+                e.hasFeatures = true;
+            }
         publishLayer (i);
+    }
+    diceUndo.reset();
+    resetGenerations();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

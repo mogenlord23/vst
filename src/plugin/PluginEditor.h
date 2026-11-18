@@ -31,6 +31,7 @@ private:
     juce::var modelToVar() const;
     juce::var peaksFor (int layer, int bins) const;
     void browseForSample (int layer);
+    void exportLayer (int layer);
     void emit (const juce::String& event, const juce::var& payload);
 
     MutaformProcessor& processor;

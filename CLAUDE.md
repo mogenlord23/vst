@@ -28,6 +28,7 @@ src/core/                 DSP + model, no GUI dependencies (unit-tested)
   Evolver.*               offline EVOLVE renderer (8 processes, seeded PRNG)
   FxChain.*               filter / distortion / chorus / delay / reverb + limiter
   Params.*                parameter IDs and layout
+  SoundFeatures.*         sound descriptors (auto-tags) + variation names
   Presets.*, FactoryPresets.* preset JSON I/O and synthesized factory sounds
 src/plugin/               AudioProcessor, editor (WebView), native-function bridge
 ui/                       index.html, style.css, app.js (embedded into the binary)

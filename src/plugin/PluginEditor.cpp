@@ -10,6 +10,7 @@ const char* mimeForPath (const juce::String& path)
     if (path.endsWithIgnoreCase (".js"))   return "text/javascript; charset=utf-8";
     if (path.endsWithIgnoreCase (".svg"))  return "image/svg+xml";
     if (path.endsWithIgnoreCase (".json")) return "application/json";
+    if (path.endsWithIgnoreCase (".ttf"))  return "font/ttf";
     return "application/octet-stream";
 }
 
@@ -79,10 +80,10 @@ MutaformEditor::MutaformEditor (MutaformProcessor& p)
     processor.addChangeListener (this);
 
     setResizable (true, true);
-    setResizeLimits (600, 400, 1800, 1200);
+    setResizeLimits (450, 600, 1200, 1600);
     if (auto* c = getConstrainer())
-        c->setFixedAspectRatio (900.0 / 600.0);
-    setSize (900, 600);
+        c->setFixedAspectRatio (600.0 / 800.0);
+    setSize (600, 800);
 }
 
 MutaformEditor::~MutaformEditor()
@@ -107,7 +108,7 @@ juce::WebBrowserComponent::Options MutaformEditor::makeBrowserOptions()
                  .withWinWebView2Options (Opts::WinWebView2 {}
                                               .withUserDataFolder (juce::File::getSpecialLocation (juce::File::tempDirectory)
                                                                        .getChildFile ("Mutaform_WebView2"))
-                                              .withBackgroundColour (juce::Colour (0xff0d0f13))
+                                              .withBackgroundColour (juce::Colour (0xff1a1219))
                                               .withStatusBarDisabled()
                                               .withBuiltInErrorPageDisabled())
                  .withNativeIntegrationEnabled()
@@ -156,14 +157,18 @@ juce::WebBrowserComponent::Options MutaformEditor::makeBrowserOptions()
             seed = (juce::uint64) a[1].toString().trim().getHexValue64();
         return juce::var (proc->evolveLayer (layerArg (a), seed));
     });
-    addNative (o, "evolveAll", [proc] (const Args&)
+    addNative (o, "evolveAll", [proc] (const Args& a)
     {
-        int started = 0;
-        for (int l = 0; l < mf::kNumLayers; ++l)
-            if (proc->getLayer (l).hasSample() && proc->evolveLayer (l))
-                ++started;
-        return juce::var (started);
+        const auto mask = a.size() > 0 ? (juce::uint32) (int) a[0] : 0x1fu;
+        return juce::var (proc->evolveGroup (mask == 0 ? 0x1fu : mask));
     });
+    addNative (o, "rollDice", [proc] (const Args&) { proc->rollDice(); return juce::var(); });
+    addNative (o, "undoDice", [proc] (const Args&) { return juce::var (proc->undoDice()); });
+    addNative (o, "stepLevel", [proc] (const Args& a) { return juce::var (proc->stepGeneration (a.size() > 0 ? (int) a[0] : 1)); });
+    addNative (o, "setLocked", [proc] (const Args& a) { proc->setLocked (layerArg (a), a.size() > 1 && (bool) a[1]); return juce::var(); });
+    addNative (o, "toggleFavorite", [proc] (const Args& a) { proc->toggleFavorite (layerArg (a), a.size() > 1 ? (int) a[1] : -1); return juce::var(); });
+    addNative (o, "resetLayer", [proc] (const Args& a) { return juce::var (proc->jumpToHistory (layerArg (a), 0)); });
+    addNative (o, "exportLayer", [this] (const Args& a) { exportLayer (layerArg (a)); return juce::var(); });
     addNative (o, "undo", [proc] (const Args& a) { return juce::var (proc->undo (layerArg (a))); });
     addNative (o, "redo", [proc] (const Args& a) { return juce::var (proc->redo (layerArg (a))); });
     addNative (o, "jumpHistory", [proc] (const Args& a) { return juce::var (proc->jumpToHistory (layerArg (a), a.size() > 1 ? (int) a[1] : 0)); });
@@ -273,6 +278,15 @@ juce::var MutaformEditor::modelToVar() const
         o->setProperty ("canUndo", processor.canUndo (i));
         o->setProperty ("canRedo", processor.canRedo (i));
         o->setProperty ("error", L.lastError);
+        o->setProperty ("locked", L.locked);
+        o->setProperty ("level", processor.getLevel (i));
+        if (L.index >= 0 && L.history[(size_t) L.index].hasFeatures)
+        {
+            const auto& f = L.history[(size_t) L.index].features;
+            o->setProperty ("brightness", f.brightness);
+            o->setProperty ("punch", f.punch);
+            o->setProperty ("motion", f.motion);
+        }
         juce::Array<juce::var> mp;
         for (auto v : L.multipoints)
             mp.add (v);
@@ -284,6 +298,9 @@ juce::var MutaformEditor::modelToVar() const
             h->setProperty ("seed", e.seed == 0 ? juce::String() : hexSeed (e.seed));
             h->setProperty ("chaos", juce::roundToInt (e.chaos * 100.0f));
             h->setProperty ("label", e.label);
+            h->setProperty ("name", e.seed == 0 ? juce::String ("ORIGINAL") : mf::variationName (e.seed));
+            h->setProperty ("fav", e.favorite);
+            h->setProperty ("tags", e.hasFeatures ? e.features.tags.joinIntoString (" ") : juce::String());
             hist.add (juce::var (h.get()));
         }
         o->setProperty ("history", hist);
@@ -292,6 +309,18 @@ juce::var MutaformEditor::modelToVar() const
     root->setProperty ("layers", ls);
     root->setProperty ("version", JucePlugin_VersionString);
     root->setProperty ("preset", processor.getCurrentPresetName());
+    root->setProperty ("level", processor.getLevel());
+    root->setProperty ("canPrevLevel", processor.canStepGeneration (-1));
+    root->setProperty ("canNextLevel", processor.canStepGeneration (1));
+    root->setProperty ("canUndoDice", processor.canUndoDice());
+    juce::uint64 h = 1469598103934665603ull;
+    for (int i = 0; i < mf::kNumLayers; ++i)
+    {
+        const auto& L = processor.getLayer (i);
+        const auto s = L.index >= 0 ? L.history[(size_t) L.index].seed : 0;
+        h = (h ^ (s + (juce::uint64) i * 7919 + (juce::uint64) (L.hasSample() ? 1 : 0))) * 1099511628211ull;
+    }
+    root->setProperty ("creatureSeed", juce::String::toHexString ((juce::int64) h));
     return juce::var (root.get());
 }
 
@@ -302,6 +331,34 @@ juce::var MutaformEditor::peaksFor (int layer, int bins) const
         for (auto v : mf::computePeaks (*s, bins))
             arr.add (juce::roundToInt (v * 1000.0f) / 1000.0);
     return arr;
+}
+
+void MutaformEditor::exportLayer (int layer)
+{
+    auto sample = processor.getLayer (layer).current();
+    if (sample == nullptr)
+    {
+        emit ("notify", juce::var ("Nothing to export"));
+        return;
+    }
+    const auto& L = processor.getLayer (layer);
+    const auto seed = L.history[(size_t) L.index].seed;
+    const auto base = (seed == 0 ? sample->name : mf::variationName (seed)).replaceCharacter (' ', '_');
+    chooser = std::make_unique<juce::FileChooser> ("Export one-shot",
+                                                   juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile (base + ".wav"),
+                                                   "*.wav");
+    juce::Component::SafePointer<MutaformEditor> safe (this);
+    chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                          [safe, sample] (const juce::FileChooser& fc)
+                          {
+                              if (safe == nullptr)
+                                  return;
+                              auto f = fc.getResult();
+                              if (f == juce::File())
+                                  return;
+                              f = f.withFileExtension (".wav");
+                              safe->emit ("notify", juce::var (mf::writeWav (*sample, f) ? "Saved " + f.getFileName() : juce::String ("Export failed")));
+                          });
 }
 
 void MutaformEditor::browseForSample (int layer)
@@ -369,7 +426,7 @@ std::optional<juce::WebBrowserComponent::Resource> MutaformEditor::getResource (
 
 void MutaformEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff0d0f13));
+    g.fillAll (juce::Colour (0xff1a1219));
 }
 
 void MutaformEditor::resized()
