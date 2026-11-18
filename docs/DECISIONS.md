@@ -32,3 +32,22 @@ Choices made autonomously during development. Newest at the bottom.
     workflow uses the "Visual Studio 17 2022" generator when VS 2022 is installed, otherwise
     the "Visual Studio 18 2026" generator with the VS 2022 **v143** toolset (`-T v143`) if that
     component is present. Locally, the documented command remains `-G "Visual Studio 17 2022"`.
+12. **EVOLVE chain**: number of processes = 2 + ⌊3·chaos + U(0,1)⌋ clamped to 2..5 (chaos 0 → 2,
+    chaos 100 % → 5); per-step strength = 0.08 + chaos·U(0.55, 1). Processes are drawn without
+    repetition from the enabled set (CHAOS tab toggles). Output is DC-removed, normalised to
+    −1 dBFS, trailing silence trimmed, 5 ms fade-out, max 20 s.
+13. **PRNG**: xoshiro256** seeded through SplitMix64 (own code, so results never depend on the
+    standard library implementation). Seeds are 64-bit, shown as hex in the UI.
+14. **History**: up to 32 entries per layer (entry 0 = original, never dropped). When the cap
+    is reached the oldest variation is removed and the next one becomes a *root* (keeps its own
+    audio). All entries keep their audio in memory during a session.
+15. **State size**: the plugin state stores audio only for the original, root entries and the
+    current variation (raw float32 + gzip, lossless). Other history steps are stored as
+    recipes (seed, chaos, process mask) and re-rendered deterministically in the background
+    when the user navigates to them.
+16. **Limiter**: own instant-attack peak limiter (80 ms release) + hard clip at the ceiling,
+    instead of `juce::dsp::Limiter`, whose fixed −10 dB first stage and make-up gain colour the
+    sound.
+17. **FX bypass/mix** are smoothed (30 ms) by blending a wet buffer, so toggling never clicks.
+    The delay is a stereo line with mild cross-feed and damped feedback; tempo sync reads the
+    host BPM from the play head (120 BPM fallback).
