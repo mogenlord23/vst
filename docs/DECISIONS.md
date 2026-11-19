@@ -92,3 +92,25 @@ Choices made autonomously during development. Newest at the bottom.
 33. The user suggested a celebrity as the mascot; declined — no likeness of real people.
     The pop-art *style* (stripes, halftone, acid colours, eyeshadow, red lips) was adopted on
     an original character instead.
+34. **v2.0 concept (user request)**: the plugin becomes a *melody machine*: a dropped sound
+    is played by a rule-based melody writer (MELODY), tuned automatically (STRETCHTONE) and
+    optionally resynthesised (GENOFORM). 9:16 window (450 × 800).
+35. **Real-person likeness declined.** The user asked for the mascot to be an exact copy of
+    a picture that depicts a recognisable celebrity; not done. Instead: original mascot
+    POPSY + a generic "character pack" loader (PNG layers) so users can supply their own art.
+36. **Synplant-like idea, own implementation**: "find synth settings from a sample" is
+    implemented as GENOFORM (own 20-gene synth, own GA and feature set). The Synplant UI
+    (note ring, plant, DNA editor) is *not* copied.
+37. **Melody rules**: progressions per mode family, one chord per bar, motif rhythm A/B with
+    strong-beat bias, chord tones on strong beats, stepwise motion with bounded leaps (never
+    beyond an octave), motif repetition shifted to the chord, cadence ending on the tonic.
+38. **Sequencer** plays from host PPQ when the transport runs and from an internal clock
+    otherwise (so MELODY works in the Standalone). Notes are injected into the engine via a
+    fixed array — the host MidiBuffer is never modified on the audio thread.
+39. **Auto-tune** shifts each layer so its detected fundamental plays as C3 (MIDI 60); thus
+    melody notes are in the selected key whatever the source pitch. Unpitched sources
+    (YIN confidence < 0.5) are tonalized with comb resonators at C3 when loaded.
+40. **FX edition** (`Mutaform FX.vst3`, `MUTAFORM_FX=1`): stereo input; FEED captures up to
+    12 s from the track into a pre-allocated buffer (audio thread only copies), the message
+    thread trims silence and loads it into a layer. Output = dry input × DRY + instrument.
+41. 3D mascot / three.js and pixel fonts from v1.x were removed.

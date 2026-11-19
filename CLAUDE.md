@@ -7,7 +7,7 @@ variations (no AI, deterministic per seed).
 ## Stack (fixed — do not change)
 - C++20, JUCE 8 (pinned tag in `CMakeLists.txt`, fetched with CMake `FetchContent`).
 - CMake ≥ 3.22, generator "Visual Studio 17 2022", x64 (CI). Linux/Ninja also works for dev & tests.
-- Formats: VST3 + Standalone. `IS_SYNTH TRUE`, `NEEDS_MIDI_INPUT TRUE`.
+- Formats: VST3 + Standalone instrument (`Mutaform`), plus VST3 effect edition (`MutaformFX`, `MUTAFORM_FX=1`).
 - UI: plain HTML/CSS/vanilla JS (no bundler) in `ui/`, rendered in `juce::WebBrowserComponent`
   (WebView2 on Windows, statically linked loader: `JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1`).
   UI files are embedded with `juce_add_binary_data` and served via the ResourceProvider.
@@ -28,10 +28,13 @@ src/core/                 DSP + model, no GUI dependencies (unit-tested)
   Evolver.*               offline EVOLVE renderer (8 processes, seeded PRNG)
   FxChain.*               filter / distortion / chorus / delay / reverb + limiter
   Params.*                parameter IDs and layout
-  SoundFeatures.*         sound descriptors (auto-tags) + variation names
+  SoundFeatures.*         sound descriptors (auto-tags), YIN pitch, tonalize, variation names
+  Melody.*                rule-based melody writer (MELODY)
+  Sequencer.*, LockFreeBox.h  lock-free, host-synced melody sequencer
+  Genoform.*              GENOFORM resynthesis: 20-gene synth + genetic algorithm
   Presets.*, FactoryPresets.* preset JSON I/O and synthesized factory sounds
 src/plugin/               AudioProcessor, editor (WebView), native-function bridge
-ui/                       index.html, style.css, app.js (embedded into the binary)
+ui/                       index.html, style.css, app.js, character.js, fonts (embedded)
 tests/                    Catch2 tests
 docs/                     PLAN.md, DECISIONS.md, DESIGN.md
 ```

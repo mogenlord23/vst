@@ -41,7 +41,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: cmake --build $env:BUILD_DIR --config $env:CONFIG --parallel 4 --target Mutaform_VST3 Mutaform_Standalone MutaformTests
+        run: cmake --build $env:BUILD_DIR --config $env:CONFIG --parallel 4 --target Mutaform_VST3 Mutaform_Standalone MutaformFX_VST3 MutaformTests
 
       - name: Unit tests
         shell: pwsh
@@ -58,19 +58,25 @@ jobs:
       - name: pluginval (strictness 10)
         shell: pwsh
         run: |
-          $vst3 = (Resolve-Path "$env:BUILD_DIR/Mutaform_artefacts/$env:CONFIG/VST3/Mutaform.vst3").Path
           New-Item -ItemType Directory -Force -Path pluginval-logs | Out-Null
-          # pluginval.exe is a GUI-subsystem app: wait for it explicitly and capture its output.
-          $args = @("--strictness-level", "10", "--validate-in-process", "--timeout-ms", "900000",
-                    "--output-dir", "pluginval-logs", "--validate", "`"$vst3`"")
-          $p = Start-Process -FilePath ./pluginval/pluginval.exe -ArgumentList $args -NoNewWindow -Wait -PassThru `
-                 -RedirectStandardOutput pluginval-logs/stdout.txt -RedirectStandardError pluginval-logs/stderr.txt
-          Get-Content pluginval-logs/stdout.txt
-          Get-Content pluginval-logs/stderr.txt
-          Write-Host "pluginval exit code: $($p.ExitCode)"
-          if ($p.ExitCode -ne 0) { exit 1 }
-          if (-not (Select-String -Path pluginval-logs/stdout.txt -Pattern "SUCCESS" -Quiet)) {
-            Write-Host "pluginval did not report SUCCESS"; exit 1
+          $plugins = @("$env:BUILD_DIR/Mutaform_artefacts/$env:CONFIG/VST3/Mutaform.vst3",
+                       "$env:BUILD_DIR/MutaformFX_artefacts/$env:CONFIG/VST3/Mutaform FX.vst3")
+          $i = 0
+          foreach ($pl in $plugins) {
+            $vst3 = (Resolve-Path $pl).Path
+            $i++
+            # pluginval.exe is a GUI-subsystem app: wait for it explicitly and capture its output.
+            $args = @("--strictness-level", "10", "--validate-in-process", "--timeout-ms", "900000",
+                      "--output-dir", "pluginval-logs", "--validate", "`"$vst3`"")
+            $p = Start-Process -FilePath ./pluginval/pluginval.exe -ArgumentList $args -NoNewWindow -Wait -PassThru `
+                   -RedirectStandardOutput "pluginval-logs/stdout$i.txt" -RedirectStandardError "pluginval-logs/stderr$i.txt"
+            Get-Content "pluginval-logs/stdout$i.txt"
+            Get-Content "pluginval-logs/stderr$i.txt"
+            Write-Host "pluginval exit code for ${vst3}: $($p.ExitCode)"
+            if ($p.ExitCode -ne 0) { exit 1 }
+            if (-not (Select-String -Path "pluginval-logs/stdout$i.txt" -Pattern "SUCCESS" -Quiet)) {
+              Write-Host "pluginval did not report SUCCESS"; exit 1
+            }
           }
 
       - name: Package
@@ -79,6 +85,7 @@ jobs:
           $out = "dist/Mutaform-win64"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           Copy-Item -Recurse "$env:BUILD_DIR/Mutaform_artefacts/$env:CONFIG/VST3/Mutaform.vst3" $out
+          Copy-Item -Recurse "$env:BUILD_DIR/MutaformFX_artefacts/$env:CONFIG/VST3/Mutaform FX.vst3" $out
           Copy-Item "$env:BUILD_DIR/Mutaform_artefacts/$env:CONFIG/Standalone/Mutaform.exe" $out
           if (Test-Path README.md) { Copy-Item README.md $out }
 

@@ -32,6 +32,7 @@ private:
     juce::var peaksFor (int layer, int bins) const;
     void browseForSample (int layer);
     void exportLayer (int layer);
+    void pickCharacterFolder();
     void emit (const juce::String& event, const juce::var& payload);
 
     MutaformProcessor& processor;

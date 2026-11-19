@@ -13,6 +13,7 @@ Each stage ends with: commit → push → GitHub Actions green (build + tests + 
 | 6 | Full UI | tabs EVOLVE/CHAOS/LAYERS/FX/MIX, drop zone, waveform with markers, scaling |
 | 7 | Presets | JSON + audio in %APPDATA%/Mutaform/Presets, 5 synthesized factory presets, randomizer |
 | 8 | Polish | README, docs, final verification |
+| 9 | v2.0 | MELODY + STRETCHTONE + GENOFORM, FX edition, 9:16 pop-art UI with mascot |
 
 ## Status
 - [x] 0 Docs
@@ -24,3 +25,4 @@ Each stage ends with: commit → push → GitHub Actions green (build + tests + 
 - [x] 6 UI
 - [x] 7 Presets
 - [x] 8 Polish
+- [x] 9 v2.0

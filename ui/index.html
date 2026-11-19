@@ -2,120 +2,74 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=600, height=800">
+<meta name="viewport" content="width=450, height=800">
 <title>Mutaform</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="device">
-  <div class="shell-lip"></div>
-  <div class="shell-shine"></div>
-  <button class="skin-btn" id="btnSkin" title="Change colour"><i></i><i></i><i></i><i></i></button>
-  <div class="logo" id="logo">MUTAFORM</div>
-  <div class="speaker" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div id="app">
+  <!-- pop tiles = toolbar -->
+  <nav class="tiles">
+    <button class="tile lime" id="tLoad" title="Load a sound"><i class="ti ti-load"></i><span>LOAD</span></button>
+    <button class="tile blue" id="tLayers" title="Layers"><i class="ti ti-layers"></i><span>LAYERS</span></button>
+    <button class="tile orange" id="tPresets" title="Presets"><i class="ti ti-star"></i><span>PRESETS</span></button>
+    <button class="tile lime" id="tSave" title="Save preset"><i class="ti ti-disk"></i><span>SAVE</span></button>
+    <button class="tile blue" id="tDice" title="Random sound + tune"><i class="ti ti-dice"></i><span>RANDOM</span></button>
+    <button class="tile orange" id="tChar" title="Load your own character layers"><i class="ti ti-face"></i><span>CHARACTER</span></button>
+  </nav>
 
-  <div id="bezel">
-    <div id="screen">
-      <canvas id="scene" width="168" height="181"></canvas>
-      <canvas id="creature3d" width="252" height="271"></canvas>
-      <div class="scanlines"></div>
-      <div class="glass"></div>
+  <header class="band">
+    <div class="logo">MUTAFORM</div>
+    <div class="preset-pill"><button id="pPrev">&#9664;</button><span id="presetName">UNTITLED</span><button id="pNext">&#9654;</button></div>
+  </header>
 
-      <!-- top bar -->
-      <div class="topbar">
-        <div class="seg-tabs" id="mainTabs">
-          <button data-view="creature" class="on">CREATURE</button>
-          <button data-view="shots">ONE-SHOTS</button>
-        </div>
-        <div class="preset-line">
-          <button class="px-arrow" id="presetPrev">&#9664;</button>
-          <span class="pod-icon" aria-hidden="true"></span>
-          <span id="presetName">UNTITLED</span>
-          <button class="px-arrow" id="presetNext">&#9654;</button>
-        </div>
-      </div>
-
-      <!-- ================= creature view ================= -->
-      <div class="view on" data-view="creature" id="creatureView">
-        <div class="side-icons">
-          <button class="px-icon" id="btnPresets" title="Presets"><i class="ic ic-folder"></i></button>
-          <button class="px-icon" id="btnSave" title="Save preset"><i class="ic ic-disk"></i></button>
-          <div class="dice-row">
-            <button class="px-icon" id="btnDice" title="Roll the dice: random sound + mutation"><i class="ic ic-dice"></i></button>
-            <button class="px-icon small hidden" id="btnUndoDice" title="Undo dice"><i class="ic ic-undo"></i></button>
-          </div>
-        </div>
-        <div class="bubble" id="bubble"></div>
-        <div class="dropcatch" id="dropCatch"></div>
-        <div class="knob-row">
-          <div class="left">
-            <div class="ctl"><button class="layer-box" id="layerBox" title="Which layer EVOLVE mutates">ALL</button><span class="lbl">LAYER</span></div>
-            <div class="ctl" id="kChaos"></div>
-          </div>
-          <div class="right">
-            <div class="ctl" id="kGlide"></div>
-            <div class="ctl" id="kVibrato"></div>
-          </div>
-        </div>
-        <div class="level-bar">
-          <button class="px-btn sq" id="lvPrev">&#9664;</button>
-          <div class="level-plate">
-            <button class="mini-ic" id="lvLock" title="Lock: keep these layers from mutating"><i class="ic ic-lock-open"></i></button>
-            <span id="levelText">LEVEL 0 - SPORE</span>
-            <button class="mini-ic" id="lvStar" title="Favourite this mutation"><i class="ic ic-star"></i></button>
-          </div>
-          <button class="px-btn sq" id="lvNext">&#9654;</button>
-        </div>
-        <div class="level-progress"><div id="levelFill"></div></div>
-      </div>
-
-      <!-- ================= one-shots view ================= -->
-      <div class="view" data-view="shots" id="shotsView">
-        <div class="paper">
-          <div class="paper-tabs">
-            <button data-sub="generated" class="on">GENERATED</button>
-            <button data-sub="library">LIBRARY</button>
-          </div>
-          <div class="sub on" data-sub="generated">
-            <div class="toolbar" id="toolbar"></div>
-            <div class="rows" id="rows"></div>
-          </div>
-          <div class="sub" data-sub="library">
-            <div class="lib-row-sel" id="libSel"></div>
-            <div class="library">
-              <div class="lib-cats" id="libCats"></div>
-              <div class="lib-list">
-                <div class="lib-head" id="libHead"></div>
-                <div id="libItems"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="footer-knobs">
-          <div class="ctl h"><span class="lbl">LAYER</span><button class="layer-box" id="layerBox2">ALL</button></div>
-          <div class="ctl h" id="kChaos2"></div>
-          <div class="ctl h" id="kGlide2"></div>
-          <div class="ctl h" id="kVibrato2"></div>
-        </div>
-      </div>
-
-      <!-- ================= overlays ================= -->
-      <div class="overlay" id="fxPanel"><div class="paper"><div class="ov-head"><span>EFFECTS</span><button class="px-btn" data-close>&#10005;</button></div><div class="fx-grid" id="fxGrid"></div></div></div>
-      <div class="overlay" id="mixPanel"><div class="paper"><div class="ov-head"><span>MIX</span><button class="px-btn" data-close>&#10005;</button></div><div id="mixBody"></div></div></div>
-      <div class="overlay" id="presetPanel"><div class="paper"><div class="ov-head"><span>PRESETS</span><button class="px-btn" data-close>&#10005;</button></div><div class="preset-list" id="presetList"></div></div></div>
-      <div class="overlay" id="savePanel"><div class="paper small"><div class="ov-head"><span>SAVE PRESET</span><button class="px-btn" data-close>&#10005;</button></div>
-        <input id="saveName" maxlength="40" spellcheck="false" placeholder="NAME"><div class="save-actions"><button class="px-btn wide" id="saveGo">SAVE</button></div></div></div>
-      <div class="toast" id="toast"></div>
-      <div class="drop-hint" id="dropHint">DROP TO LOAD INTO <b id="dropTarget">LAYER 1</b></div>
+  <section class="stage" id="stage">
+    <div class="burst"></div>
+    <div class="stickers left">
+      <button class="sticker pink" id="sEvolve" title="Mutate the sound (EVOLVE)">EVOLVE</button>
+      <button class="sticker yellow" id="sGeno" title="GENOFORM: grow a synth patch that matches the sound">GENO<br>FORM</button>
+      <button class="sticker cyan hidden" id="sFeed" title="Capture audio from this track">FEED</button>
     </div>
-  </div>
+    <div class="stickers right">
+      <button class="sticker lime" id="sTune" title="Write a new melody">NEW<br>TUNE</button>
+      <button class="sticker orange" id="sUndo" title="Undo mutation">UNDO</button>
+    </div>
+    <div class="char-slot" id="charSlot">
+      <div class="char" id="char"></div>
+      <canvas id="ribbon" width="360" height="200"></canvas>
+    </div>
+    <div class="bubble" id="bubble">DROP A SOUND!</div>
+    <div class="geno-meter hidden" id="genoMeter"><div class="gm-dots" id="gmDots"></div><span id="gmText">GROWING 0%</span></div>
+    <div class="status" id="status"></div>
+  </section>
 
-  <div class="buttons">
-    <div class="btn-well"><button class="round fx" id="btnFx"><span>FX</span></button></div>
-    <div class="btn-well big"><button class="round evolve" id="btnEvolve"><span>EVOLVE</span></button></div>
-    <div class="btn-well"><button class="round mix" id="btnMix"><span>MIX</span></button></div>
-  </div>
-  <div class="keys-strip" id="keys" title="Click to audition (or use A–L on your keyboard)"></div>
+  <section class="knobs" id="knobs"></section>
+
+  <footer class="buttons">
+    <button class="arcade yellow" id="bFx"><span>FX</span></button>
+    <button class="arcade pink big" id="bMelody"><span>MELODY</span></button>
+    <button class="arcade blue" id="bMix"><span>MIX</span></button>
+  </footer>
+
+  <!-- overlays -->
+  <div class="overlay" id="ovFx"><div class="panel"><div class="ph"><span>FX</span><button class="x" data-close>&#10005;</button></div><div class="pb" id="fxBody"></div></div></div>
+  <div class="overlay" id="ovMix"><div class="panel"><div class="ph"><span>MIX</span><button class="x" data-close>&#10005;</button></div><div class="pb" id="mixBody"></div></div></div>
+  <div class="overlay" id="ovLayers"><div class="panel"><div class="ph"><span>LAYERS</span><button class="x" data-close>&#10005;</button></div><div class="pb" id="layersBody"></div></div></div>
+  <div class="overlay" id="ovPresets"><div class="panel"><div class="ph"><span>PRESETS</span><button class="x" data-close>&#10005;</button></div><div class="pb" id="presetList"></div></div></div>
+  <div class="overlay" id="ovSave"><div class="panel small"><div class="ph"><span>SAVE PRESET</span><button class="x" data-close>&#10005;</button></div>
+    <div class="pb"><input id="saveName" maxlength="40" spellcheck="false" placeholder="NAME"><button class="pop-btn wide" id="saveGo">SAVE</button></div></div></div>
+  <div class="overlay" id="ovChar"><div class="panel"><div class="ph"><span>CHARACTER</span><button class="x" data-close>&#10005;</button></div>
+    <div class="pb">
+      <p>Use your own artwork. Pick a folder with transparent PNG layers of the same size (portrait, about 3:4):</p>
+      <ul class="files">
+        <li><b>base.png</b> head &amp; body without arms (required)</li>
+        <li><b>eyes_closed.png</b> overlay for blinking</li>
+        <li><b>mouth_open.png</b>, <b>mouth_wide.png</b> overlays for singing</li>
+        <li><b>arm_left.png</b>, <b>arm_right.png</b> arms (they get raised, lowered and stretched)</li>
+      </ul>
+      <div class="row"><button class="pop-btn" id="charPick">CHOOSE FOLDER&hellip;</button><button class="pop-btn ghost" id="charReset">USE DEFAULT</button></div>
+    </div></div></div>
+  <div class="toast" id="toast"></div>
 </div>
 <script type="module" src="app.js"></script>
 </body>

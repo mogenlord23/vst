@@ -3,6 +3,30 @@
 
 namespace
 {
+const char* kCharacterLayers[] = { "base", "eyes_closed", "mouth_open", "mouth_wide", "arm_left", "arm_right" };
+
+juce::File characterFolder()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Mutaform").getChildFile ("Character");
+}
+
+/** User character pack: PNG layers copied into %APPDATA%/Mutaform/Character, served as data URLs. */
+juce::var characterPackToVar()
+{
+    const auto dir = characterFolder();
+    if (! dir.getChildFile ("base.png").existsAsFile())
+        return {};
+    juce::DynamicObject::Ptr o = new juce::DynamicObject();
+    for (auto* name : kCharacterLayers)
+    {
+        const auto f = dir.getChildFile (juce::String (name) + ".png");
+        juce::MemoryBlock mb;
+        if (f.existsAsFile() && f.getSize() < 20 * 1024 * 1024 && f.loadFileAsData (mb))
+            o->setProperty (name, "data:image/png;base64," + mb.toBase64Encoding());
+    }
+    return juce::var (o.get());
+}
+
 const char* mimeForPath (const juce::String& path)
 {
     if (path.endsWithIgnoreCase (".html")) return "text/html; charset=utf-8";
@@ -80,10 +104,10 @@ MutaformEditor::MutaformEditor (MutaformProcessor& p)
     processor.addChangeListener (this);
 
     setResizable (true, true);
-    setResizeLimits (450, 600, 1200, 1600);
+    setResizeLimits (338, 600, 900, 1600);
     if (auto* c = getConstrainer())
-        c->setFixedAspectRatio (600.0 / 800.0);
-    setSize (600, 800);
+        c->setFixedAspectRatio (450.0 / 800.0);
+    setSize (450, 800);
 }
 
 MutaformEditor::~MutaformEditor()
@@ -108,7 +132,7 @@ juce::WebBrowserComponent::Options MutaformEditor::makeBrowserOptions()
                  .withWinWebView2Options (Opts::WinWebView2 {}
                                               .withUserDataFolder (juce::File::getSpecialLocation (juce::File::tempDirectory)
                                                                        .getChildFile ("Mutaform_WebView2"))
-                                              .withBackgroundColour (juce::Colour (0xff1a1219))
+                                              .withBackgroundColour (juce::Colour (0xffff1fa8))
                                               .withStatusBarDisabled()
                                               .withBuiltInErrorPageDisabled())
                  .withNativeIntegrationEnabled()
@@ -235,6 +259,20 @@ juce::WebBrowserComponent::Options MutaformEditor::makeBrowserOptions()
         return juce::var (r.get());
     });
     addNative (o, "randomize", [proc] (const Args&) { proc->randomizeParameters(); return juce::var (proc->getCurrentPresetName()); });
+    addNative (o, "isEffect", [] (const Args&) { return juce::var (MutaformProcessor::isEffectEdition()); });
+    addNative (o, "newMelody", [proc] (const Args& a)
+    {
+        juce::uint64 seed = 0;
+        if (a.size() > 0 && a[0].toString().isNotEmpty()) seed = (juce::uint64) a[0].toString().getHexValue64();
+        proc->newMelody (seed);
+        return juce::var (juce::String::toHexString ((juce::int64) proc->getMelodySeed()));
+    });
+    addNative (o, "genoform", [proc] (const Args& a) { return juce::var (proc->startGenoform (layerArg (a))); });
+    addNative (o, "startCapture", [proc] (const Args& a) { return juce::var (proc->startCapture (layerArg (a))); });
+    addNative (o, "stopCapture", [proc] (const Args&) { proc->stopCapture(); return juce::var(); });
+    addNative (o, "getCharacterPack", [] (const Args&) { return characterPackToVar(); });
+    addNative (o, "pickCharacterFolder", [this] (const Args&) { pickCharacterFolder(); return juce::var(); });
+    addNative (o, "resetCharacter", [] (const Args&) { characterFolder().deleteRecursively(); return juce::var(); });
     addNative (o, "getMeters", [proc] (const Args&)
     {
         juce::DynamicObject::Ptr m = new juce::DynamicObject();
@@ -244,6 +282,12 @@ juce::WebBrowserComponent::Options MutaformEditor::makeBrowserOptions()
         m->setProperty ("playheads", ph);
         m->setProperty ("voices", proc->getEngine().getNumActiveVoices());
         m->setProperty ("limiter", proc->getFx().getLimiterGain());
+        m->setProperty ("note", proc->getSequencer().getCurrentNote());
+        m->setProperty ("step", proc->getSequencer().getCurrentStep());
+        m->setProperty ("geno", proc->getGenoformLayer() >= 0 ? proc->getGenoformProgress() : -1.0f);
+        m->setProperty ("genoScore", proc->getGenoformScore());
+        m->setProperty ("capturing", proc->isCapturing());
+        m->setProperty ("captureSec", proc->getCaptureSeconds());
         return juce::var (m.get());
     });
 
@@ -281,6 +325,11 @@ juce::var MutaformEditor::modelToVar() const
         o->setProperty ("canRedo", processor.canRedo (i));
         o->setProperty ("error", L.lastError);
         o->setProperty ("locked", L.locked);
+        if (L.index >= 0 && L.history[(size_t) L.index].hasFeatures)
+        {
+            o->setProperty ("pitch", L.history[(size_t) L.index].features.pitchMidi);
+            o->setProperty ("pitchConf", L.history[(size_t) L.index].features.pitchConfidence);
+        }
         o->setProperty ("level", processor.getLevel (i));
         if (L.index >= 0 && L.history[(size_t) L.index].hasFeatures)
         {
@@ -315,6 +364,8 @@ juce::var MutaformEditor::modelToVar() const
     root->setProperty ("canPrevLevel", processor.canStepGeneration (-1));
     root->setProperty ("canNextLevel", processor.canStepGeneration (1));
     root->setProperty ("canUndoDice", processor.canUndoDice());
+    root->setProperty ("capturing", processor.isCapturing());
+    root->setProperty ("melodySeed", juce::String::toHexString ((juce::int64) processor.getMelodySeed()));
     juce::uint64 h = 1469598103934665603ull;
     for (int i = 0; i < mf::kNumLayers; ++i)
     {
@@ -360,6 +411,34 @@ void MutaformEditor::exportLayer (int layer)
                                   return;
                               f = f.withFileExtension (".wav");
                               safe->emit ("notify", juce::var (mf::writeWav (*sample, f) ? "Saved " + f.getFileName() : juce::String ("Export failed")));
+                          });
+}
+
+void MutaformEditor::pickCharacterFolder()
+{
+    chooser = std::make_unique<juce::FileChooser> ("Choose a folder with your character PNG layers", juce::File());
+    juce::Component::SafePointer<MutaformEditor> safe (this);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                          [safe] (const juce::FileChooser& fc)
+                          {
+                              if (safe == nullptr)
+                                  return;
+                              const auto src = fc.getResult();
+                              if (! src.getChildFile ("base.png").existsAsFile())
+                              {
+                                  safe->emit ("notify", juce::var ("base.png not found in that folder"));
+                                  return;
+                              }
+                              const auto dst = characterFolder();
+                              dst.deleteRecursively();
+                              dst.createDirectory();
+                              for (auto* name : kCharacterLayers)
+                              {
+                                  const auto f = src.getChildFile (juce::String (name) + ".png");
+                                  if (f.existsAsFile())
+                                      f.copyFileTo (dst.getChildFile (f.getFileName()));
+                              }
+                              safe->emit ("characterChanged", juce::var (true));
                           });
 }
 
@@ -428,7 +507,7 @@ std::optional<juce::WebBrowserComponent::Resource> MutaformEditor::getResource (
 
 void MutaformEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff1a1219));
+    g.fillAll (juce::Colour (0xffff1fa8));
 }
 
 void MutaformEditor::resized()
