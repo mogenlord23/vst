@@ -137,7 +137,7 @@ void SamplerEngine::updateRegions (const EngineSettings& s)
         r.xfade = std::max (0.0, std::min ({ xfSamples, r.vLoopStart, loopLen * 0.5 }));
 
         r.rateRatio = r.sample->sampleRate / hostRate;
-        r.pitchSemis = ls.pitchSemis;
+        r.pitchSemis = ls.pitchSemis + tuneOffset[(size_t) i].load (std::memory_order_relaxed);
         r.mpMode = ls.mpMode;
 
         const float g = juce::Decibels::decibelsToGain (ls.gainDb, -60.0f);
@@ -278,7 +278,8 @@ void SamplerEngine::handleMidi (const juce::MidiMessage& m, const EngineSettings
 }
 
 //==============================================================================
-void SamplerEngine::render (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, const EngineSettings& s)
+void SamplerEngine::render (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, const EngineSettings& s,
+                            const NoteEvent* extra, int numExtra)
 {
     out.clear();
     updateRegions (s);
@@ -308,9 +309,26 @@ void SamplerEngine::render (juce::AudioBuffer<float>& out, const juce::MidiBuffe
 
     const int numSamples = out.getNumSamples();
     int pos = 0;
+    int xi = 0; // extra events are sorted by samplePos
+    auto flushExtra = [&] (int upTo)
+    {
+        while (xi < numExtra && extra[xi].samplePos <= upTo)
+        {
+            const int evPos = juce::jlimit (0, numSamples, extra[xi].samplePos);
+            if (evPos > pos)
+            {
+                renderVoices (out, pos, evPos - pos, s);
+                pos = evPos;
+            }
+            if (extra[xi].velocity > 0.0f) noteOn (extra[xi].note, extra[xi].velocity, s);
+            else                           noteOff (extra[xi].note);
+            ++xi;
+        }
+    };
     for (const auto meta : midi)
     {
         const int evPos = juce::jlimit (0, numSamples, meta.samplePosition);
+        flushExtra (evPos - 1);
         if (evPos > pos)
         {
             renderVoices (out, pos, evPos - pos, s);
@@ -318,6 +336,7 @@ void SamplerEngine::render (juce::AudioBuffer<float>& out, const juce::MidiBuffe
         }
         handleMidi (meta.getMessage(), s);
     }
+    flushExtra (numSamples);
     if (pos < numSamples)
         renderVoices (out, pos, numSamples - pos, s);
 

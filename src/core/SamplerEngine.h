@@ -7,6 +7,9 @@ namespace mf
 {
 enum class MultipointMode { off = 0, key = 1, velocity = 2, cycle = 3 };
 
+/** Note event generated inside the audio thread (melody sequencer). velocity 0 = note off. */
+struct NoteEvent { int samplePos = 0; int note = 60; float velocity = 0.0f; };
+
 struct LayerSettings
 {
     float start = 0.0f, end = 1.0f;          // normalised positions in the sample
@@ -43,13 +46,16 @@ public:
     // ---- message thread ----
     void setSample (int layer, SamplePtr sample) { slots[(size_t) layer].publish (std::move (sample)); }
     void setMultipoints (int layer, const std::vector<float>& normalisedPoints);
+    /** Extra pitch offset per layer (auto-tune to the detected fundamental). Any thread. */
+    void setLayerTune (int layer, float semitones) { tuneOffset[(size_t) layer].store (semitones); }
     void collectGarbage();
 
     /** Message thread: queue a note from the UI (velocity 0 = note off). Lock-free. */
     void queueNote (int note, float velocity);
 
     // ---- audio thread ----
-    void render (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, const EngineSettings& settings);
+    void render (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, const EngineSettings& settings,
+                 const NoteEvent* extra = nullptr, int numExtra = 0);
     void allNotesOff (bool immediately);
 
     // ---- any thread (relaxed info for UI) ----
@@ -121,6 +127,7 @@ private:
     std::array<int, kNumLayers> cycleCounter {};
 
     std::array<std::atomic<float>, kNumLayers> playheads {};
+    std::array<std::atomic<float>, kNumLayers> tuneOffset {};
     std::atomic<int> activeVoices { 0 };
 
     double hostRate = 44100.0;

@@ -22,6 +22,17 @@ namespace pid
     inline constexpr const char* velSens = "vel_sens";
     inline constexpr const char* glide = "glide";
     inline constexpr const char* vibrato = "vibrato";
+    // MELODY engine
+    inline constexpr const char* melOn = "mel_on";
+    inline constexpr const char* melKey = "mel_key";
+    inline constexpr const char* melScale = "mel_scale";
+    inline constexpr const char* melMood = "mel_mood";
+    inline constexpr const char* melDensity = "mel_density";
+    inline constexpr const char* melBars = "mel_bars";
+    inline constexpr const char* melOctave = "mel_octave";
+    inline constexpr const char* autoTune = "auto_tune";
+    inline constexpr const char* tonalize = "tonalize";
+    inline constexpr const char* fxDry = "fx_dry";
     inline constexpr const char* chaos = "chaos";
     // evolve process enables
     inline constexpr std::array<const char*, 8> evoProcess { "evo_pitch", "evo_grain", "evo_filter", "evo_sat",
@@ -75,6 +86,8 @@ struct ParamRefs
     std::array<Layer, kNumLayers> layers;
     std::atomic<float>* masterGain {}, *limiterOn {}, *limiterCeiling {}, *attack {}, *decay {}, *sustain {}, *release {},
         *velSens {}, *chaos {}, *glide {}, *vibrato {};
+    std::atomic<float>* melOn {}, *melKey {}, *melScale {}, *melMood {}, *melDensity {}, *melBars {}, *melOctave {},
+        *autoTune {}, *tonalize {}, *fxDry {};
     std::array<std::atomic<float>*, 8> evo {};
     std::atomic<float>* fltOn {}, *fltType {}, *fltCutoff {}, *fltRes {}, *fltMix {}, *distOn {}, *distDrive {}, *distMix {},
         *choOn {}, *choRate {}, *choDepth {}, *choMix {}, *dlyOn {}, *dlySync {}, *dlyTime {}, *dlyDiv {}, *dlyFeedback {},

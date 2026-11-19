@@ -86,18 +86,23 @@ set(MUTAFORM_CORE_SOURCES
     src/core/Evolver.cpp
     src/core/FxChain.cpp
     src/core/SoundFeatures.cpp
+    src/core/Melody.cpp
+    src/core/Genoform.cpp
+    src/core/Sequencer.cpp
     src/core/Presets.cpp
     src/core/FactoryPresets.cpp)
 
-target_sources(Mutaform PRIVATE
+function(mutaform_configure tgt isfx)
+target_sources(${tgt} PRIVATE
     ${MUTAFORM_CORE_SOURCES}
     src/plugin/PluginProcessor.cpp
     src/plugin/PluginEditor.cpp)
 
-target_include_directories(Mutaform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(${tgt} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-target_compile_definitions(Mutaform
+target_compile_definitions(${tgt}
     PRIVATE
+        MUTAFORM_FX=${isfx}
         JUCE_WEB_BROWSER=1
         JUCE_USE_CURL=0
         JUCE_USE_MP3AUDIOFORMAT=1
@@ -109,7 +114,7 @@ target_compile_definitions(Mutaform
         JUCE_STRICT_REFCOUNTEDPOINTER=1
         JUCE_SILENCE_XCODE_15_LINKER_WARNING=1)
 
-target_link_libraries(Mutaform
+target_link_libraries(${tgt}
     PRIVATE
         MutaformUI
         juce::juce_audio_utils
@@ -120,6 +125,31 @@ target_link_libraries(Mutaform
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+endfunction()
+
+mutaform_configure(Mutaform 0)
+
+# Effect edition: same code, audio input + capture ("feed it from a track")
+juce_add_plugin(MutaformFX
+    COMPANY_NAME "Mutaform Audio"
+    COMPANY_WEBSITE "https://github.com/mogenlord23/vst"
+    BUNDLE_ID com.mutaformaudio.mutaformfx
+    PLUGIN_MANUFACTURER_CODE Mtfm
+    PLUGIN_CODE Mtf2
+    PRODUCT_NAME "Mutaform FX"
+    DESCRIPTION "Captures audio from a track and turns it into melodies"
+    FORMATS VST3
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT TRUE
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
+    NEEDS_WEB_BROWSER TRUE
+    NEEDS_WEBVIEW2 TRUE
+    VST3_CATEGORIES Fx Generator
+    COPY_PLUGIN_AFTER_BUILD FALSE)
+mutaform_configure(MutaformFX 1)
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -139,6 +169,7 @@ if(MUTAFORM_BUILD_TESTS)
         tests/FxTests.cpp
         tests/PresetTests.cpp
         tests/GameplayTests.cpp
+        tests/MelodyTests.cpp
         tests/StateTests.cpp)
     target_link_libraries(MutaformTests PRIVATE Mutaform Catch2::Catch2)
     # Reuse the plugin's compiled shared code; inherit its JUCE include paths/definitions.

@@ -20,10 +20,15 @@ const juce::Identifier kAudio ("audio");
 } // namespace
 
 MutaformProcessor::MutaformProcessor()
-    : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+    : AudioProcessor (BusesProperties()
+                     #if MUTAFORM_FX
+                      .withInput ("Input", juce::AudioChannelSet::stereo(), true)
+                     #endif
+                      .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", mf::createParameterLayout())
 {
     params.bind (apvts);
+    regenerateMelody();
     startTimerHz (20);
 }
 
@@ -38,6 +43,10 @@ void MutaformProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     engine.prepare (sampleRate, samplesPerBlock);
     fx.prepare (sampleRate, std::max (1, samplesPerBlock));
+    sequencer.prepare (sampleRate);
+    currentRate = sampleRate;
+    if (captureState.load() == 0)
+        captureBuf.setSize (2, (int) (12.0 * sampleRate) + 1, false, true, false);
     mixBuffer.setSize (2, std::max (1, samplesPerBlock), false, true, false);
 }
 
@@ -49,8 +58,14 @@ void MutaformProcessor::releaseResources()
 
 bool MutaformProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
+   #if MUTAFORM_FX
+    const auto in = layouts.getMainInputChannelSet();
+    if (in != juce::AudioChannelSet::stereo() && in != juce::AudioChannelSet::mono() && in != juce::AudioChannelSet::disabled())
+        return false;
+   #else
     if (layouts.getMainInputChannelSet() != juce::AudioChannelSet::disabled())
         return false;
+   #endif
     const auto out = layouts.getMainOutputChannelSet();
     return out == juce::AudioChannelSet::stereo() || out == juce::AudioChannelSet::mono();
 }
@@ -107,22 +122,68 @@ void MutaformProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
 {
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
-    for (int c = 0; c < buffer.getNumChannels(); ++c)
-        buffer.clear (c, 0, n);
+    const int inCh = getTotalNumInputChannels();
+
+    // ---- capture input (FX edition): straight copy into a pre-allocated buffer
+    int cs = captureState.load (std::memory_order_acquire);
+    if (cs == 2)
+    {
+        captureState.store (3, std::memory_order_release);
+        cs = 3;
+    }
+    if (cs == 1 && inCh > 0 && captureBuf.getNumSamples() > 0)
+    {
+        const int pos = captureLen.load (std::memory_order_relaxed);
+        const int room = captureBuf.getNumSamples() - pos;
+        const int k = std::min (room, n);
+        if (k > 0)
+            for (int c = 0; c < 2; ++c)
+                captureBuf.copyFrom (c, pos, buffer, std::min (c, inCh - 1), 0, k);
+        captureLen.store (pos + std::max (0, k), std::memory_order_release);
+        if (k < n)
+            captureState.store (3, std::memory_order_release); // buffer full
+    }
 
     if (mixBuffer.getNumSamples() < n)
+    {
+        for (int c = 0; c < buffer.getNumChannels(); ++c)
+            buffer.clear (c, 0, n);
         return; // host exceeded the announced block size; never allocate here
+    }
 
-    juce::AudioBuffer<float> mix (mixBuffer.getArrayOfWritePointers(), 2, n);
-    engine.render (mix, midi, readEngineSettings());
-
-    auto fxs = readFxSettings();
+    // ---- transport
+    double bpm = 120.0, ppq = 0.0;
+    bool playing = false;
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
-            if (auto bpm = pos->getBpm())
-                fxs.bpm = *bpm;
+        {
+            if (auto b = pos->getBpm()) bpm = *b;
+            if (auto q = pos->getPpqPosition()) ppq = *q;
+            playing = pos->getIsPlaying() && pos->getPpqPosition().hasValue();
+        }
+
+    // ---- melody sequencer -> engine
+    const int numEv = sequencer.process (n, params.melOn->load() > 0.5f, playing, ppq, bpm,
+                                         seqEvents.data(), (int) seqEvents.size());
+
+    juce::AudioBuffer<float> mix (mixBuffer.getArrayOfWritePointers(), 2, n);
+    engine.render (mix, midi, readEngineSettings(), seqEvents.data(), numEv);
+
+    auto fxs = readFxSettings();
+    fxs.bpm = bpm;
     fx.process (mix, n, fxs);
 
+   #if MUTAFORM_FX
+    const float dry = params.fxDry->load();
+    for (int c = 0; c < std::min (2, buffer.getNumChannels()); ++c)
+    {
+        if (c < inCh) buffer.applyGain (c, 0, n, dry);
+        else          buffer.clear (c, 0, n);
+        buffer.addFrom (c, 0, mix, c, 0, n);
+    }
+   #else
+    for (int c = 0; c < buffer.getNumChannels(); ++c)
+        buffer.clear (c, 0, n);
     if (buffer.getNumChannels() >= 2)
     {
         buffer.copyFrom (0, 0, mix, 0, 0, n);
@@ -133,12 +194,64 @@ void MutaformProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         buffer.copyFromWithRamp (0, 0, mix.getReadPointer (0), n, 0.5f, 0.5f);
         buffer.addFrom (0, 0, mix, 1, 0, n, 0.5f);
     }
+   #endif
 }
 
 //==============================================================================
 void MutaformProcessor::housekeeping()
 {
     engine.collectGarbage();
+    sequencer.collectGarbage();
+
+    // melody follows its parameters
+    const auto ms = readMelodySettings();
+    const auto key = juce::String (ms.key) + "|" + juce::String ((int) ms.scale) + "|" + juce::String (ms.mood, 2) + "|"
+                     + juce::String (ms.density, 2) + "|" + juce::String (ms.bars) + "|" + juce::String (ms.octave);
+    if (key != lastMelodyKey)
+        regenerateMelody();
+    const bool at = params.autoTune->load() > 0.5f;
+    if (at != lastAutoTune)
+    {
+        lastAutoTune = at;
+        for (int i = 0; i < mf::kNumLayers; ++i)
+            applyTune (i);
+    }
+    if (captureState.load() == 3)
+        finishCapture();
+
+    std::vector<GenoJob> geno;
+    {
+        const juce::ScopedLock sl (resultLock);
+        geno.swap (finishedGeno);
+    }
+    for (auto& g : geno)
+    {
+        auto& L = layers[(size_t) g.layer];
+        L.busy = false;
+        genoLayer = -1;
+        genoProgress = -1.0f;
+        if (g.epoch != L.epoch || g.result.audio == nullptr || ! L.hasSample())
+        {
+            sendChangeMessage();
+            continue;
+        }
+        g.result.audio->name = (L.current() != nullptr ? L.current()->name : juce::String ("Genoform"));
+        L.history.resize ((size_t) L.index + 1);
+        LayerModel::Entry e;
+        e.audio = g.result.audio;
+        e.seed = g.seed;
+        e.chaos = 0.0f;
+        e.root = true; // not derivable through EVOLVE
+        e.label = "GENOFORM match " + juce::String (juce::roundToInt (g.result.score * 100.0f)) + "%";
+        e.features = mf::analyseSound (*e.audio);
+        e.hasFeatures = true;
+        L.history.push_back (std::move (e));
+        while ((int) L.history.size() > kMaxHistory)
+            L.history.erase (L.history.begin() + 1);
+        L.index = (int) L.history.size() - 1;
+        publishLayer (g.layer);
+        pushGeneration();
+    }
 
     std::vector<JobResult> done;
     {
@@ -175,6 +288,7 @@ void MutaformProcessor::publishLayer (int layer)
 {
     auto& L = layers[(size_t) layer];
     ++L.revision;
+    applyTune (layer);
     engine.setSample (layer, L.current());
     engine.setMultipoints (layer, L.multipoints);
     sendChangeMessage();
@@ -581,6 +695,15 @@ void MutaformProcessor::setLayerSample (int layer, mf::SamplePtr sample, const j
     {
         e.features = mf::analyseSound (*e.audio);
         e.hasFeatures = true;
+        // STRETCHTONE: unpitched material is tuned through resonators so melodies sound musical
+        if (params.tonalize->load() > 0.5f && e.features.pitchConfidence < 0.5f)
+        {
+            auto tonal = mf::tonalize (*e.audio, 261.63, 0.7f);
+            tonal->name = e.audio->name;
+            e.audio = tonal;
+            e.features = mf::analyseSound (*e.audio);
+            e.label = "Original (tonalized)";
+        }
     }
     L.history.push_back (std::move (e));
     L.index = 0;
@@ -624,6 +747,133 @@ void MutaformProcessor::setMultipoints (int layer, std::vector<float> points)
     layers[(size_t) layer].multipoints = std::move (points);
     engine.setMultipoints (layer, layers[(size_t) layer].multipoints);
     sendChangeMessage();
+}
+
+//==============================================================================
+void MutaformProcessor::applyTune (int layer)
+{
+    const auto& L = layers[(size_t) layer];
+    float offset = 0.0f;
+    if (params.autoTune->load() > 0.5f && L.index >= 0)
+    {
+        const auto& e = L.history[(size_t) L.index];
+        if (e.hasFeatures && e.features.pitchConfidence >= 0.5f)
+            offset = juce::jlimit (-36.0f, 36.0f, (float) mf::kRootNote - e.features.pitchMidi);
+    }
+    engine.setLayerTune (layer, offset);
+}
+
+mf::MelodySettings MutaformProcessor::readMelodySettings() const
+{
+    mf::MelodySettings m;
+    m.key = juce::jlimit (0, 11, (int) params.melKey->load());
+    m.scale = (mf::Scale) juce::jlimit (0, (int) mf::Scale::count - 1, (int) params.melScale->load());
+    m.mood = params.melMood->load();
+    m.density = params.melDensity->load();
+    static constexpr int bars[] = { 1, 2, 4, 8 };
+    m.bars = bars[juce::jlimit (0, 3, (int) params.melBars->load())];
+    m.octave = (int) params.melOctave->load();
+    m.seed = melodySeed;
+    return m;
+}
+
+void MutaformProcessor::regenerateMelody()
+{
+    const auto ms = readMelodySettings();
+    lastMelodyKey = juce::String (ms.key) + "|" + juce::String ((int) ms.scale) + "|" + juce::String (ms.mood, 2) + "|"
+                    + juce::String (ms.density, 2) + "|" + juce::String (ms.bars) + "|" + juce::String (ms.octave);
+    melody = mf::generateMelody (ms);
+    sequencer.setPattern (mf::SeqPattern::fromMelody (melody));
+    sendChangeMessage();
+}
+
+void MutaformProcessor::newMelody (juce::uint64 seed)
+{
+    while (seed == 0)
+        seed = (juce::uint64) juce::Random::getSystemRandom().nextInt64();
+    melodySeed = seed;
+    regenerateMelody();
+}
+
+bool MutaformProcessor::startGenoform (int layer, juce::uint64 seed)
+{
+    auto& L = layers[(size_t) layer];
+    if (L.busy || L.current() == nullptr || genoLayer.load() >= 0)
+        return false;
+    while (seed == 0)
+        seed = (juce::uint64) juce::Random::getSystemRandom().nextInt64();
+    L.busy = true;
+    genoLayer = layer;
+    genoProgress = 0.0f;
+    genoScore = 0.0f;
+    sendChangeMessage();
+    GenoJob job;
+    job.layer = layer;
+    job.epoch = L.epoch;
+    job.seed = seed;
+    auto source = L.current();
+    workers.addJob ([this, job, source]() mutable
+                    {
+                        mf::GenoformOptions o;
+                        o.seed = job.seed;
+                        o.population = 32;
+                        o.generations = 36;
+                        job.result = mf::genoformMatch (*source, o, [this] (float p, float sc)
+                                                        {
+                                                            genoProgress = p;
+                                                            genoScore = sc;
+                                                            return ! cancelJobs.load();
+                                                        });
+                        const juce::ScopedLock sl (resultLock);
+                        finishedGeno.push_back (std::move (job));
+                    });
+    return true;
+}
+
+bool MutaformProcessor::startCapture (int layer)
+{
+    if (captureState.load() != 0 || captureBuf.getNumSamples() == 0 || getTotalNumInputChannels() == 0)
+        return false;
+    captureLayer = juce::jlimit (0, mf::kNumLayers - 1, layer);
+    captureLen.store (0);
+    captureState.store (1, std::memory_order_release);
+    sendChangeMessage();
+    return true;
+}
+
+void MutaformProcessor::stopCapture()
+{
+    int expected = 1;
+    captureState.compare_exchange_strong (expected, 2);
+}
+
+float MutaformProcessor::getCaptureSeconds() const
+{
+    return currentRate > 0 ? (float) (captureLen.load() / currentRate) : 0.0f;
+}
+
+void MutaformProcessor::finishCapture()
+{
+    const int len = captureLen.load (std::memory_order_acquire);
+    captureState.store (0, std::memory_order_release);
+    // trim silence at both ends
+    const float thr = juce::Decibels::decibelsToGain (-60.0f);
+    int a = 0, z = len - 1;
+    auto loud = [this, thr] (int i) { return std::abs (captureBuf.getSample (0, i)) > thr || std::abs (captureBuf.getSample (1, i)) > thr; };
+    while (a < z && ! loud (a)) ++a;
+    while (z > a && ! loud (z)) --z;
+    if (z - a < (int) (0.02 * currentRate))
+    {
+        sendChangeMessage();
+        return;
+    }
+    auto s = std::make_shared<mf::SampleData>();
+    s->sampleRate = currentRate;
+    s->name = "Captured";
+    s->audio.setSize (2, z - a + 1);
+    for (int c = 0; c < 2; ++c)
+        s->audio.copyFrom (c, 0, captureBuf, c, a, z - a + 1);
+    setLayerSample (captureLayer, s, "capture");
 }
 
 //==============================================================================
@@ -789,6 +1039,7 @@ void MutaformProcessor::getStateInformation (juce::MemoryBlock& destData)
     root.setProperty (kVersion, 1, nullptr);
     root.setProperty ("preset", currentPreset, nullptr);
     root.setProperty ("skin", uiSkin, nullptr);
+    root.setProperty ("melodySeed", juce::String::toHexString ((juce::int64) melodySeed), nullptr);
     root.appendChild (apvts.copyState(), nullptr);
 
     juce::ValueTree layersTree (kLayers);
@@ -844,6 +1095,9 @@ void MutaformProcessor::setStateInformation (const void* data, int sizeInBytes)
         return;
     currentPreset = root.getProperty ("preset").toString();
     uiSkin = root.getProperty ("skin", "pink").toString();
+    if (root.hasProperty ("melodySeed"))
+        melodySeed = (juce::uint64) root.getProperty ("melodySeed").toString().getHexValue64();
+    regenerateMelody();
 
     auto layersTree = root.getChildWithName (kLayers);
     for (auto& L : layers)

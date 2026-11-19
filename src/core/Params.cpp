@@ -71,6 +71,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (fl (pid::glide, "Glide", timeRange (0.0f, 2000.0f, 200.0f), 0.0f, "ms"));
     layout.add (fl (pid::vibrato, "Vibrato", Range (0.0f, 1.0f), 0.0f));
 
+    layout.add (bl (pid::melOn, "Melody", false));
+    layout.add (std::make_unique<APC> (juce::ParameterID { pid::melKey, 1 }, "Melody Key",
+                                       juce::StringArray { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }, 9));
+    layout.add (std::make_unique<APC> (juce::ParameterID { pid::melScale, 1 }, "Melody Scale",
+                                       juce::StringArray { "Major", "Minor", "Dorian", "Maj Penta", "Min Penta", "Harm Minor", "Lydian", "Phrygian" }, 1));
+    layout.add (fl (pid::melMood, "Melody Mood", Range (0.0f, 1.0f), 0.4f));
+    layout.add (fl (pid::melDensity, "Melody Density", Range (0.0f, 1.0f), 0.5f));
+    layout.add (std::make_unique<APC> (juce::ParameterID { pid::melBars, 1 }, "Melody Bars", juce::StringArray { "1", "2", "4", "8" }, 2));
+    layout.add (std::make_unique<API> (juce::ParameterID { pid::melOctave, 1 }, "Melody Octave", -2, 2, 0));
+    layout.add (bl (pid::autoTune, "Auto Tune", true));
+    layout.add (bl (pid::tonalize, "Tonalize Noise", true));
+    layout.add (fl (pid::fxDry, "FX Dry", Range (0.0f, 1.0f), 1.0f));
+
     layout.add (fl (pid::chaos, "Chaos", Range (0.0f, 100.0f, 0.1f), 40.0f, "%"));
     const std::array<const char*, 8> evoNames { "Pitch Shift", "Grain Shuffle", "Envelope Filter", "Saturation",
                                                 "Time Stretch", "Ring Mod", "Reverse Tail", "Transient Shaper" };
@@ -147,6 +160,9 @@ void ParamRefs::bind (juce::AudioProcessorValueTreeState& apvts)
     velSens = get (pid::velSens);
     glide = get (pid::glide);
     vibrato = get (pid::vibrato);
+    melOn = get (pid::melOn); melKey = get (pid::melKey); melScale = get (pid::melScale); melMood = get (pid::melMood);
+    melDensity = get (pid::melDensity); melBars = get (pid::melBars); melOctave = get (pid::melOctave);
+    autoTune = get (pid::autoTune); tonalize = get (pid::tonalize); fxDry = get (pid::fxDry);
     chaos = get (pid::chaos);
     for (size_t i = 0; i < evo.size(); ++i)
         evo[i] = get (pid::evoProcess[i]);

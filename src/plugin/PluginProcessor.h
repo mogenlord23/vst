@@ -6,6 +6,8 @@
 #include "core/FxChain.h"
 #include "core/Presets.h"
 #include "core/SoundFeatures.h"
+#include "core/Sequencer.h"
+#include "core/Genoform.h"
 #include <optional>
 
 /** Message-thread model of one layer: its sample history (for EVOLVE undo/redo). */
@@ -132,6 +134,32 @@ public:
     /** Random but musical parameter set; leaves samples, master and limiter untouched. */
     void randomizeParameters (juce::uint64 seed = 0);
 
+    // ---- MELODY (message thread) ----
+    void newMelody (juce::uint64 seed = 0);           // seed 0 = random
+    const mf::MelodyPattern& getMelody() const { return melody; }
+    juce::uint64 getMelodySeed() const { return melodySeed; }
+    mf::MelodySequencer& getSequencer() { return sequencer; }
+
+    // ---- GENOFORM (message thread) ----
+    bool startGenoform (int layer, juce::uint64 seed = 0);
+    float getGenoformProgress() const { return genoProgress.load(); }
+    float getGenoformScore() const { return genoScore.load(); }
+    int getGenoformLayer() const { return genoLayer.load(); }
+
+    // ---- capture (FX edition; also usable in the instrument if the host routes audio) ----
+    static constexpr bool isEffectEdition() noexcept
+    {
+       #if MUTAFORM_FX
+        return true;
+       #else
+        return false;
+       #endif
+    }
+    bool startCapture (int layer);
+    void stopCapture();
+    bool isCapturing() const { return captureState.load() != 0; }
+    float getCaptureSeconds() const;
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
@@ -176,6 +204,31 @@ private:
 
     juce::AudioBuffer<float> mixBuffer;
     juce::String currentPreset;
+
+    // melody
+    void regenerateMelody();
+    mf::MelodySettings readMelodySettings() const;
+    mf::MelodyPattern melody;
+    juce::uint64 melodySeed = 0x5eed;
+    mf::MelodySequencer sequencer;
+    std::array<mf::NoteEvent, 128> seqEvents {};
+    juce::String lastMelodyKey;
+    bool lastAutoTune = true;
+    void applyTune (int layer);
+
+    // genoform
+    struct GenoJob { int layer = -1; int epoch = 0; juce::uint64 seed = 0; mf::GenoformResult result; };
+    std::vector<GenoJob> finishedGeno;
+    std::atomic<float> genoProgress { -1.0f }, genoScore { 0.0f };
+    std::atomic<int> genoLayer { -1 };
+
+    // capture
+    juce::AudioBuffer<float> captureBuf;
+    std::atomic<int> captureState { 0 };  // 0 idle, 1 recording, 2 stop requested, 3 finished
+    std::atomic<int> captureLen { 0 };
+    int captureLayer = 0;
+    double currentRate = 44100.0;
+    void finishCapture();
     std::vector<Generation> generations;
     int generationIndex = -1;
     juce::uint32 groupPending = 0;
